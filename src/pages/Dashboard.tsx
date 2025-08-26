@@ -12,101 +12,26 @@ import {
   ChevronRight,
   LogOut
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/hooks/useAuth";
+import { useTransactions, Transaction } from "@/hooks/useTransactions";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
 
-interface Transaction {
-  id: string;
-  type: "income" | "expense";
-  description: string;
-  amount: number;
-  date: string;
-  category: string;
-  status: "paid" | "pending";
-  isRecurring?: boolean;
-  recurrenceType?: "monthly" | "yearly";
-  recurrenceCount?: number;
-}
-
 const Dashboard = () => {
-  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const { user, signOut } = useAuth();
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
 
-  // Verificar autenticação
-  useEffect(() => {
-    if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/");
-    }
-  }, [navigate]);
-
-  // Carregar transações mockadas
-  useEffect(() => {
-    const mockTransactions: Transaction[] = [
-      {
-        id: "1",
-        type: "income",
-        description: "Salário",
-        amount: 5000,
-        date: "2024-01-15",
-        category: "Salário",
-        status: "paid"
-      },
-      {
-        id: "2",
-        type: "expense",
-        description: "Aluguel",
-        amount: 1200,
-        date: "2024-01-05",
-        category: "Moradia",
-        status: "paid"
-      },
-      {
-        id: "3",
-        type: "expense",
-        description: "Supermercado",
-        amount: 300,
-        date: "2024-01-10",
-        category: "Alimentação",
-        status: "paid"
-      },
-      {
-        id: "4",
-        type: "expense",
-        description: "Conta de Luz",
-        amount: 150,
-        date: "2024-01-20",
-        category: "Contas",
-        status: "pending"
-      }
-    ];
-    setTransactions(mockTransactions);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    navigate("/");
+  const handleLogout = async () => {
+    await signOut();
   };
 
-  const addTransaction = (transaction: Omit<Transaction, "id">) => {
-    const newTransaction = {
-      ...transaction,
-      id: Date.now().toString()
-    };
-    setTransactions(prev => [...prev, newTransaction]);
+  const handleAddTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+    await addTransaction(transactionData);
     setShowTransactionForm(false);
-  };
-
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  };
-
-  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
   // Filtrar transações do mês atual
@@ -272,11 +197,17 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <TransactionList
-              transactions={currentMonthTransactions}
-              onDelete={deleteTransaction}
-              onUpdate={updateTransaction}
-            />
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <TransactionList
+                transactions={currentMonthTransactions}
+                onDelete={deleteTransaction}
+                onUpdate={updateTransaction}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -284,7 +215,7 @@ const Dashboard = () => {
       {/* Modal de Nova Transação */}
       {showTransactionForm && (
         <TransactionForm
-          onSubmit={addTransaction}
+          onSubmit={handleAddTransaction}
           onClose={() => setShowTransactionForm(false)}
         />
       )}

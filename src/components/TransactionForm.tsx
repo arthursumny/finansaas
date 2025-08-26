@@ -11,20 +11,20 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-interface Transaction {
+interface TransactionFormData {
   type: "income" | "expense";
   description: string;
   amount: number;
   date: string;
   category: string;
   status: "paid" | "pending";
-  isRecurring?: boolean;
-  recurrenceType?: "monthly" | "yearly";
-  recurrenceCount?: number;
+  is_recurring?: boolean;
+  recurrence_type?: "monthly" | "yearly";
+  recurrence_count?: number;
 }
 
 interface TransactionFormProps {
-  onSubmit: (transaction: Transaction) => void;
+  onSubmit: (transaction: TransactionFormData) => void;
   onClose: () => void;
 }
 
@@ -34,16 +34,16 @@ const categories = {
 };
 
 const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
-  const [formData, setFormData] = useState<Transaction>({
+  const [formData, setFormData] = useState<TransactionFormData>({
     type: "expense",
     description: "",
     amount: 0,
     date: format(new Date(), "yyyy-MM-dd"),
     category: "",
     status: "paid",
-    isRecurring: false,
-    recurrenceType: "monthly",
-    recurrenceCount: 1
+    is_recurring: false,
+    recurrence_type: "monthly",
+    recurrence_count: 1
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
@@ -200,21 +200,21 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
                 <Label htmlFor="recurring">Transação recorrente</Label>
                 <Switch
                   id="recurring"
-                  checked={formData.isRecurring}
+                  checked={formData.is_recurring}
                   onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, isRecurring: checked }))
+                    setFormData(prev => ({ ...prev, is_recurring: checked }))
                   }
                 />
               </div>
 
-              {formData.isRecurring && (
+              {formData.is_recurring && (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label>Tipo</Label>
                     <Select
-                      value={formData.recurrenceType}
+                      value={formData.recurrence_type}
                       onValueChange={(value: "monthly" | "yearly") => 
-                        setFormData(prev => ({ ...prev, recurrenceType: value }))
+                        setFormData(prev => ({ ...prev, recurrence_type: value }))
                       }
                     >
                       <SelectTrigger>
@@ -232,10 +232,10 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
                       type="number"
                       min="1"
                       max="60"
-                      value={formData.recurrenceCount || 1}
+                      value={formData.recurrence_count || 1}
                       onChange={(e) => setFormData(prev => ({ 
                         ...prev, 
-                        recurrenceCount: parseInt(e.target.value) || 1 
+                        recurrence_count: parseInt(e.target.value) || 1 
                       }))}
                     />
                   </div>

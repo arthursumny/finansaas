@@ -20,9 +20,12 @@ interface Transaction {
   date: string;
   category: string;
   status: "paid" | "pending";
-  isRecurring?: boolean;
-  recurrenceType?: "monthly" | "yearly";
-  recurrenceCount?: number;
+  is_recurring?: boolean;
+  recurrence_type?: "monthly" | "yearly";
+  recurrence_count?: number;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface TransactionListProps {
@@ -85,7 +88,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate }: TransactionListPr
                     >
                       {transaction.category}
                     </Badge>
-                    {transaction.isRecurring && (
+                    {transaction.is_recurring && (
                       <Badge variant="outline" className="text-xs">
                         Recorrente
                       </Badge>
