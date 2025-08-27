@@ -69,9 +69,13 @@ export type Database = {
           created_at: string | null
           date: string
           description: string
+          discount_amount: number | null
           id: string
           is_recurring: boolean | null
+          original_amount: number | null
           recurrence_count: number | null
+          recurrence_end_date: string | null
+          recurrence_start_date: string | null
           recurrence_type: string | null
           status: string
           type: string
@@ -84,9 +88,13 @@ export type Database = {
           created_at?: string | null
           date: string
           description: string
+          discount_amount?: number | null
           id?: string
           is_recurring?: boolean | null
+          original_amount?: number | null
           recurrence_count?: number | null
+          recurrence_end_date?: string | null
+          recurrence_start_date?: string | null
           recurrence_type?: string | null
           status: string
           type: string
@@ -99,9 +107,13 @@ export type Database = {
           created_at?: string | null
           date?: string
           description?: string
+          discount_amount?: number | null
           id?: string
           is_recurring?: boolean | null
+          original_amount?: number | null
           recurrence_count?: number | null
+          recurrence_end_date?: string | null
+          recurrence_start_date?: string | null
           recurrence_type?: string | null
           status?: string
           type?: string

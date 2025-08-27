@@ -23,6 +23,10 @@ interface Transaction {
   is_recurring?: boolean;
   recurrence_type?: "monthly" | "yearly";
   recurrence_count?: number;
+  recurrence_start_date?: string;
+  recurrence_end_date?: string;
+  original_amount?: number;
+  discount_amount?: number;
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -121,6 +125,12 @@ const TransactionList = ({ transactions, onDelete, onUpdate }: TransactionListPr
                   }`}>
                     {transaction.type === "income" ? "+" : "-"}{formatCurrency(transaction.amount)}
                   </div>
+                  {transaction.discount_amount && transaction.discount_amount > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      <span className="line-through">{formatCurrency(transaction.original_amount || 0)}</span>
+                      <span className="ml-1 text-success">-{formatCurrency(transaction.discount_amount)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
