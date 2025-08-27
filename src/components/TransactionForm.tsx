@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { Transaction } from "@/hooks/useTransactions";
 
 interface TransactionFormData {
   type: "income" | "expense";
@@ -30,6 +31,8 @@ interface TransactionFormData {
 interface TransactionFormProps {
   onSubmit: (transaction: TransactionFormData) => void;
   onClose: () => void;
+  initialData?: Transaction;
+  isEditing?: boolean;
 }
 
 const categories = {
@@ -37,23 +40,44 @@ const categories = {
   expense: ["Moradia", "Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Contas", "Outros"]
 };
 
-const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
-  const [formData, setFormData] = useState<TransactionFormData>({
-    type: "expense",
-    description: "",
-    amount: 0,
-    date: format(new Date(), "yyyy-MM-dd"),
-    category: "",
-    status: "paid",
-    is_recurring: false,
-    recurrence_type: "monthly",
-    recurrence_count: 1,
-    recurrence_start_date: format(new Date(), "yyyy-MM-dd"),
-    recurrence_end_date: format(new Date(), "yyyy-MM-dd"),
-    original_amount: 0,
-    discount_amount: 0
+const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
+  const [formData, setFormData] = useState<TransactionFormData>(() => {
+    if (initialData) {
+      return {
+        type: initialData.type,
+        description: initialData.description,
+        amount: initialData.amount,
+        date: initialData.date,
+        category: initialData.category,
+        status: initialData.status,
+        is_recurring: initialData.is_recurring || false,
+        recurrence_type: initialData.recurrence_type || "monthly",
+        recurrence_count: initialData.recurrence_count || 1,
+        recurrence_start_date: initialData.recurrence_start_date || format(new Date(), "yyyy-MM-dd"),
+        recurrence_end_date: initialData.recurrence_end_date || format(new Date(), "yyyy-MM-dd"),
+        original_amount: initialData.original_amount || initialData.amount,
+        discount_amount: initialData.discount_amount || 0
+      };
+    }
+    return {
+      type: "expense",
+      description: "",
+      amount: 0,
+      date: format(new Date(), "yyyy-MM-dd"),
+      category: "",
+      status: "paid",
+      is_recurring: false,
+      recurrence_type: "monthly",
+      recurrence_count: 1,
+      recurrence_start_date: format(new Date(), "yyyy-MM-dd"),
+      recurrence_end_date: format(new Date(), "yyyy-MM-dd"),
+      original_amount: 0,
+      discount_amount: 0
+    };
   });
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => 
+    initialData ? new Date(initialData.date) : new Date()
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,8 +99,10 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Nova Transação</CardTitle>
-              <CardDescription>Adicione uma receita ou despesa</CardDescription>
+              <CardTitle>{isEditing ? "Editar Transação" : "Nova Transação"}</CardTitle>
+              <CardDescription>
+                {isEditing ? "Modifique os dados da transação" : "Adicione uma receita ou despesa"}
+              </CardDescription>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="w-4 h-4" />
@@ -256,17 +282,18 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
             </div>
 
             {/* Recorrência */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="recurring">Transação recorrente</Label>
-                <Switch
-                  id="recurring"
-                  checked={formData.is_recurring}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, is_recurring: checked }))
-                  }
-                />
-              </div>
+            {!isEditing && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="recurring">Transação recorrente</Label>
+                  <Switch
+                    id="recurring"
+                    checked={formData.is_recurring}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, is_recurring: checked }))
+                    }
+                  />
+                </div>
 
               {formData.is_recurring && (
                 <div className="space-y-4">
@@ -333,6 +360,7 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
                 </div>
               )}
             </div>
+            )}
 
             {/* Botões */}
             <div className="flex gap-2 pt-4">

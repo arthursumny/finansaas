@@ -22,6 +22,7 @@ import TransactionList from "@/components/TransactionList";
 const Dashboard = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
 
@@ -32,6 +33,17 @@ const Dashboard = () => {
   const handleAddTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     await addTransaction(transactionData);
     setShowTransactionForm(false);
+  };
+
+  const handleEditTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+    if (editingTransaction) {
+      await updateTransaction(editingTransaction.id, transactionData);
+      setEditingTransaction(null);
+    }
+  };
+
+  const handleOpenEdit = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
   };
 
   // Filtrar transações do mês atual
@@ -245,6 +257,7 @@ const Dashboard = () => {
                 transactions={currentMonthTransactions}
                 onDelete={deleteTransaction}
                 onUpdate={updateTransaction}
+                onEdit={handleOpenEdit}
               />
             )}
           </CardContent>
@@ -256,6 +269,16 @@ const Dashboard = () => {
         <TransactionForm
           onSubmit={handleAddTransaction}
           onClose={() => setShowTransactionForm(false)}
+        />
+      )}
+
+      {/* Modal de Edição de Transação */}
+      {editingTransaction && (
+        <TransactionForm
+          initialData={editingTransaction}
+          onSubmit={handleEditTransaction}
+          onClose={() => setEditingTransaction(null)}
+          isEditing={true}
         />
       )}
     </div>

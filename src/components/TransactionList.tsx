@@ -7,7 +7,8 @@ import {
   Calendar,
   Trash2,
   Check,
-  Clock 
+  Clock,
+  Edit
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,9 +37,10 @@ interface TransactionListProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Transaction>) => void;
+  onEdit: (transaction: Transaction) => void;
 }
 
-const TransactionList = ({ transactions, onDelete, onUpdate }: TransactionListProps) => {
+const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: TransactionListProps) => {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -147,6 +149,15 @@ const TransactionList = ({ transactions, onDelete, onUpdate }: TransactionListPr
                   ) : (
                     <Clock className="w-4 h-4 text-warning" />
                   )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(transaction)}
+                  className="h-8 w-8"
+                  title="Editar transação"
+                >
+                  <Edit className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="ghost"
