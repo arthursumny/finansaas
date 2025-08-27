@@ -54,15 +54,20 @@ const Dashboard = () => {
 
   const monthlyBalance = monthlyIncome - monthlyExpenses;
 
-  // Calcular saldo acumulado real baseado em todas as transações
+  // Calcular saldo acumulado real até o mês atual (não incluindo mês atual)
   const allPaidTransactions = transactions.filter(t => t.status === "paid");
-  const totalIncome = allPaidTransactions
+  const transactionsUpToCurrentMonth = allPaidTransactions.filter(transaction => {
+    const transactionDate = new Date(transaction.date);
+    return transactionDate < monthStart; // Apenas transações anteriores ao mês atual
+  });
+  
+  const accumulatedIncome = transactionsUpToCurrentMonth
     .filter(t => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = allPaidTransactions
+  const accumulatedExpenses = transactionsUpToCurrentMonth
     .filter(t => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
-  const accumulatedBalance = totalIncome - totalExpenses;
+  const accumulatedBalance = accumulatedIncome - accumulatedExpenses;
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate(prev => 

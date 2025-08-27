@@ -289,7 +289,7 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Repetições</Label>
+                      <Label>Quantos meses repetir</Label>
                       <Input
                         type="number"
                         min="1"
@@ -300,6 +300,9 @@ const TransactionForm = ({ onSubmit, onClose }: TransactionFormProps) => {
                           recurrence_count: parseInt(e.target.value) || 1 
                         }))}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Número de meses (ou anos) que a transação será repetida
+                      </p>
                     </div>
                   </div>
 
