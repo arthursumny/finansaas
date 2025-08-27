@@ -54,20 +54,47 @@ const Dashboard = () => {
 
   const monthlyBalance = monthlyIncome - monthlyExpenses;
 
-  // Calcular saldo acumulado real até o mês atual (não incluindo mês atual)
-  const allPaidTransactions = transactions.filter(t => t.status === "paid");
-  const transactionsUpToCurrentMonth = allPaidTransactions.filter(transaction => {
-    const transactionDate = new Date(transaction.date);
-    return transactionDate < monthStart; // Apenas transações anteriores ao mês atual
-  });
-  
-  const accumulatedIncome = transactionsUpToCurrentMonth
-    .filter(t => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const accumulatedExpenses = transactionsUpToCurrentMonth
-    .filter(t => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const accumulatedBalance = accumulatedIncome - accumulatedExpenses;
+  // Calcular saldo acumulado progressivo mês a mês
+  const calculateAccumulatedBalance = () => {
+    const allPaidTransactions = transactions.filter(t => t.status === "paid");
+    
+    // Agrupar transações por mês/ano
+    const transactionsByMonth = allPaidTransactions.reduce((acc, transaction) => {
+      const transactionDate = new Date(transaction.date);
+      const monthKey = format(transactionDate, "yyyy-MM");
+      
+      if (!acc[monthKey]) {
+        acc[monthKey] = { income: 0, expenses: 0 };
+      }
+      
+      if (transaction.type === "income") {
+        acc[monthKey].income += transaction.amount;
+      } else {
+        acc[monthKey].expenses += transaction.amount;
+      }
+      
+      return acc;
+    }, {} as Record<string, { income: number; expenses: number }>);
+    
+    // Ordenar meses e calcular saldo acumulado progressivo
+    const sortedMonths = Object.keys(transactionsByMonth).sort();
+    const currentMonthKey = format(currentDate, "yyyy-MM");
+    let accumulatedBalance = 0;
+    
+    for (const monthKey of sortedMonths) {
+      const monthBalance = transactionsByMonth[monthKey].income - transactionsByMonth[monthKey].expenses;
+      accumulatedBalance += monthBalance;
+      
+      // Parar no mês atual (incluindo o mês atual)
+      if (monthKey === currentMonthKey) {
+        break;
+      }
+    }
+    
+    return accumulatedBalance;
+  };
+
+  const accumulatedBalance = calculateAccumulatedBalance();
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate(prev => 
