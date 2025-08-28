@@ -56,17 +56,20 @@ export const useTransactions = () => {
   const generateRecurringTransactions = (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     const transactions = [];
     
-    if (!transaction.is_recurring || !transaction.recurrence_start_date || !transaction.recurrence_end_date) {
+    if (!transaction.is_recurring) {
       return [transaction];
     }
 
-    const startDate = new Date(transaction.recurrence_start_date);
-    const endDate = new Date(transaction.recurrence_end_date);
+    const startDate = new Date(transaction.date);
     let currentDate = new Date(startDate);
     let count = 0;
     const maxCount = transaction.recurrence_count || 12;
+    const isForever = maxCount === 999;
 
-    while (!isAfter(currentDate, endDate) && count < maxCount) {
+    // Se for "sempre", gera para os próximos 60 meses (5 anos)
+    const actualMaxCount = isForever ? 60 : maxCount;
+
+    while (count < actualMaxCount) {
       transactions.push({
         ...transaction,
         date: format(currentDate, 'yyyy-MM-dd'),
@@ -74,8 +77,8 @@ export const useTransactions = () => {
         is_recurring: count === 0 ? true : false,
         recurrence_count: count === 0 ? maxCount : undefined,
         recurrence_type: count === 0 ? transaction.recurrence_type : undefined,
-        recurrence_start_date: count === 0 ? transaction.recurrence_start_date : undefined,
-        recurrence_end_date: count === 0 ? transaction.recurrence_end_date : undefined,
+        recurrence_start_date: undefined,
+        recurrence_end_date: undefined,
       });
 
       // Próxima data baseada no tipo de recorrência

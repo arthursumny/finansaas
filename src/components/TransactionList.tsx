@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import DiscountModal from "./DiscountModal";
 
 interface Transaction {
   id: string;
@@ -41,6 +43,11 @@ interface TransactionListProps {
 }
 
 const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: TransactionListProps) => {
+  const [discountModal, setDiscountModal] = useState<{
+    isOpen: boolean;
+    transaction: Transaction | null;
+  }>({ isOpen: false, transaction: null });
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -52,9 +59,26 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: Transacti
     return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR });
   };
 
-  const toggleStatus = (transaction: Transaction) => {
-    const newStatus = transaction.status === "paid" ? "pending" : "paid";
-    onUpdate(transaction.id, { status: newStatus });
+  const handleMarkAsPaid = (transaction: Transaction) => {
+    // Se for transação recorrente marcando como paga, perguntar sobre desconto
+    if (transaction.is_recurring && transaction.status === "pending") {
+      setDiscountModal({ isOpen: true, transaction });
+    } else {
+      const newStatus = transaction.status === "paid" ? "pending" : "paid";
+      onUpdate(transaction.id, { status: newStatus });
+    }
+  };
+
+  const handleDiscountConfirm = (originalAmount: number, paidAmount: number) => {
+    if (discountModal.transaction) {
+      const discountAmount = originalAmount - paidAmount;
+      onUpdate(discountModal.transaction.id, {
+        status: "paid",
+        original_amount: originalAmount,
+        discount_amount: discountAmount,
+        amount: paidAmount
+      });
+    }
   };
 
   if (transactions.length === 0) {
@@ -140,7 +164,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: Transacti
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => toggleStatus(transaction)}
+                  onClick={() => handleMarkAsPaid(transaction)}
                   className="h-8 w-8"
                   title={transaction.status === "paid" ? "Marcar como pendente" : "Marcar como pago"}
                 >
@@ -173,6 +197,14 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: Transacti
           </CardContent>
         </Card>
       ))}
+      
+      <DiscountModal
+        isOpen={discountModal.isOpen}
+        onClose={() => setDiscountModal({ isOpen: false, transaction: null })}
+        onConfirm={handleDiscountConfirm}
+        currentAmount={discountModal.transaction?.amount || 0}
+        transactionDescription={discountModal.transaction?.description || ""}
+      />
     </div>
   );
 };
