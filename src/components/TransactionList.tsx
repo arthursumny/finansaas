@@ -40,9 +40,10 @@ interface TransactionListProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Transaction>) => void;
   onEdit: (transaction: Transaction) => void;
+  onDeleteAllRecurring: (transaction: Transaction) => void;
 }
 
-const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: TransactionListProps) => {
+const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring }: TransactionListProps) => {
   const [discountModal, setDiscountModal] = useState<{
     isOpen: boolean;
     transaction: Transaction | null;
@@ -79,6 +80,16 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: Transacti
         amount: paidAmount
       });
     }
+    setDiscountModal({ isOpen: false, transaction: null });
+  };
+
+  const handleFullDiscount = (transaction: Transaction) => {
+    onUpdate(transaction.id, {
+      status: "paid",
+      original_amount: transaction.amount,
+      discount_amount: transaction.amount,
+      amount: 0
+    });
   };
 
   if (transactions.length === 0) {
@@ -192,6 +203,28 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit }: Transacti
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
+                {transaction.is_recurring && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleFullDiscount(transaction)}
+                      className="h-8 text-xs px-2 text-success hover:text-success"
+                      title="Abater valor inteiro"
+                    >
+                      Abater
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDeleteAllRecurring(transaction)}
+                      className="h-8 text-xs px-2 text-destructive hover:text-destructive"
+                      title="Excluir todas as recorrências"
+                    >
+                      Excluir Todas
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>

@@ -24,7 +24,7 @@ const Dashboard = () => {
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const { user, signOut } = useAuth();
-  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions } = useTransactions();
 
   const handleLogout = async () => {
     await signOut();
@@ -258,6 +258,7 @@ const Dashboard = () => {
                 onDelete={deleteTransaction}
                 onUpdate={updateTransaction}
                 onEdit={handleOpenEdit}
+                onDeleteAllRecurring={deleteAllRecurringTransactions}
               />
             )}
           </CardContent>

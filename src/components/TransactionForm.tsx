@@ -264,30 +264,21 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Repetir</Label>
-                        <Select
-                          value={formData.recurrence_count === 999 ? "sempre" : formData.recurrence_count?.toString() || "1"}
-                          onValueChange={(value) => {
-                            const count = value === "sempre" ? 999 : parseInt(value) || 1;
+                        <Label>Repetir (máximo 96 vezes)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="96"
+                          value={formData.recurrence_count || 1}
+                          onChange={(e) => {
+                            const count = Math.min(96, Math.max(1, parseInt(e.target.value) || 1));
                             setFormData(prev => ({ 
                               ...prev, 
                               recurrence_count: count 
                             }));
                           }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">1 mês</SelectItem>
-                            <SelectItem value="2">2 meses</SelectItem>
-                            <SelectItem value="3">3 meses</SelectItem>
-                            <SelectItem value="6">6 meses</SelectItem>
-                            <SelectItem value="12">12 meses</SelectItem>
-                            <SelectItem value="24">24 meses</SelectItem>
-                            <SelectItem value="sempre">Sempre</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          placeholder="Ex: 12"
+                        />
                         <p className="text-xs text-muted-foreground">
                           A partir da data escolhida acima
                         </p>

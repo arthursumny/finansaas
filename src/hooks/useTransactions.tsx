@@ -63,13 +63,9 @@ export const useTransactions = () => {
     const startDate = new Date(transaction.date);
     let currentDate = new Date(startDate);
     let count = 0;
-    const maxCount = transaction.recurrence_count || 12;
-    const isForever = maxCount === 999;
+    const maxCount = transaction.recurrence_count || 1;
 
-    // Se for "sempre", gera para os próximos 60 meses (5 anos)
-    const actualMaxCount = isForever ? 60 : maxCount;
-
-    while (count < actualMaxCount) {
+    while (count < maxCount) {
       transactions.push({
         ...transaction,
         date: format(currentDate, 'yyyy-MM-dd'),
@@ -181,6 +177,48 @@ export const useTransactions = () => {
     }
   };
 
+  const deleteAllRecurringTransactions = async (originalTransaction: Transaction) => {
+    if (!user) return;
+
+    try {
+      // Busca todas as transações com a mesma descrição, categoria, valor e tipo (grupo recorrente)
+      const { data: relatedTransactions, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('description', originalTransaction.description)
+        .eq('category', originalTransaction.category)
+        .eq('type', originalTransaction.type)
+        .gte('date', originalTransaction.date); // Apenas da data atual em diante
+
+      if (fetchError) throw fetchError;
+
+      if (relatedTransactions && relatedTransactions.length > 0) {
+        const ids = relatedTransactions.map(t => t.id);
+        
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .in('id', ids)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+        
+        setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+        toast({
+          title: "Transações recorrentes excluídas",
+          description: `${relatedTransactions.length} transações removidas com sucesso!`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir transações recorrentes",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     fetchTransactions();
   }, [user]);
@@ -191,6 +229,7 @@ export const useTransactions = () => {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    deleteAllRecurringTransactions,
     refetch: fetchTransactions,
   };
 };
