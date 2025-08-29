@@ -119,11 +119,6 @@
 
 ### 📋 **Roadmap Sugerido**
 
-#### **Fase 1 (1-2 semanas)**
-1. Gráficos básicos (Chart.js)
-2. Filtros avançados
-3. Modo escuro
-
 #### **Fase 2 (2-3 semanas)**
 1. Orçamento por categoria
 2. Exportação PDF/CSV
