@@ -57,7 +57,11 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
   };
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR });
+    // Formatar manualmente uma string yyyy-MM-dd para dd/MM/yyyy sem criar Date (evita timezone)
+    if (!dateString) return "";
+    const [y, m, d] = dateString.split("-");
+    if (!y || !m || !d) return dateString;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
   };
 
   const handleMarkAsPaid = (transaction: Transaction) => {
@@ -94,58 +98,59 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
 
   if (transactions.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <p>Nenhuma transação registrada neste mês</p>
+      <div className="text-center py-12 text-secondary">
+        <Calendar className="w-16 h-16 mx-auto mb-6 opacity-40" />
+        <p className="text-lg font-medium">Nenhuma transação registrada neste mês</p>
+        <p className="text-sm mt-2 opacity-75">Adicione sua primeira transação para começar</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {transactions.map((transaction) => (
-        <Card key={transaction.id} className="transition-all hover:shadow-md">
-          <CardContent className="p-4">
+        <Card key={transaction.id} className="transition-all hover:shadow-lg border-0 shadow-sm">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              <div className="flex items-center gap-4 flex-1">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                   transaction.type === "income" 
-                    ? "bg-income-light text-income" 
-                    : "bg-expense-light text-expense"
+                    ? "bg-primary/10 text-primary" 
+                    : "bg-destructive/10 text-destructive"
                 }`}>
                   {transaction.type === "income" ? (
-                    <TrendingUp className="w-5 h-5" />
+                    <TrendingUp className="w-6 h-6" />
                   ) : (
-                    <TrendingDown className="w-5 h-5" />
+                    <TrendingDown className="w-6 h-6" />
                   )}
                 </div>
 
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="font-medium">{transaction.description}</h4>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h4 className="font-semibold text-foreground text-base">{transaction.description}</h4>
                     <Badge 
                       variant="secondary" 
-                      className="text-xs"
+                      className="text-xs font-medium bg-card text-secondary border-0"
                     >
                       {transaction.category}
                     </Badge>
                     {transaction.is_recurring && (
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Recorrente
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-2 text-secondary">
+                      <Calendar className="w-4 h-4" />
                       {formatDate(transaction.date)}
                     </span>
                     <Badge 
                       variant={transaction.status === "paid" ? "default" : "secondary"}
-                      className={`text-xs ${
+                      className={`text-xs font-medium ${
                         transaction.status === "paid" 
-                          ? (transaction.type === "income" ? "bg-income text-income-foreground" : "bg-success text-success-foreground")
-                          : "bg-warning text-warning-foreground"
+                          ? "bg-primary text-white"
+                          : "bg-secondary/50 text-secondary border-0"
                       }`}
                     >
                       {transaction.status === "paid" 
@@ -157,48 +162,48 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 </div>
 
                 <div className="text-right">
-                  <div className={`text-lg font-bold ${
-                    transaction.type === "income" ? "text-income" : "text-expense"
+                  <div className={`text-xl font-bold ${
+                    transaction.type === "income" ? "text-primary" : "text-destructive"
                   }`}>
                     {transaction.type === "income" ? "+" : "-"}{formatCurrency(transaction.amount)}
                   </div>
                   {transaction.discount_amount && transaction.discount_amount > 0 && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-secondary mt-1">
                       <span className="line-through">{formatCurrency(transaction.original_amount || 0)}</span>
-                      <span className="ml-1 text-success">-{formatCurrency(transaction.discount_amount)}</span>
+                      <span className="ml-2 text-primary font-medium">-{formatCurrency(transaction.discount_amount)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 ml-4">
+              <div className="flex items-center gap-2 ml-6">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => handleMarkAsPaid(transaction)}
-                  className="h-8 w-8"
+                  className="h-9 w-9 hover:bg-card"
                   title={transaction.status === "paid" ? "Marcar como pendente" : "Marcar como pago"}
                 >
                   {transaction.status === "paid" ? (
-                    <Check className="w-4 h-4 text-success" />
+                    <Check className="w-4 h-4 text-primary" />
                   ) : (
-                    <Clock className="w-4 h-4 text-warning" />
+                    <Clock className="w-4 h-4 text-secondary" />
                   )}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onEdit(transaction)}
-                  className="h-8 w-8"
+                  className="h-9 w-9 hover:bg-card"
                   title="Editar transação"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Edit className="w-4 h-4 text-secondary hover:text-foreground" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onDelete(transaction.id)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                   title="Excluir transação"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -209,7 +214,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFullDiscount(transaction)}
-                      className="h-8 text-xs px-2 text-success hover:text-success"
+                      className="h-9 text-xs px-3 text-primary hover:text-primary hover:bg-primary/10 font-medium"
                       title="Abater valor inteiro"
                     >
                       Abater
@@ -218,7 +223,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                       variant="ghost"
                       size="sm"
                       onClick={() => onDeleteAllRecurring(transaction)}
-                      className="h-8 text-xs px-2 text-destructive hover:text-destructive"
+                      className="h-9 text-xs px-3 text-destructive hover:text-destructive hover:bg-destructive/10 font-medium"
                       title="Excluir todas as recorrências"
                     >
                       Excluir Todas

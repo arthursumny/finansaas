@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 import { addMonths, addYears, format, isAfter, isSameDay } from 'date-fns';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface Transaction {
   id: string;
@@ -15,6 +16,7 @@ export interface Transaction {
   is_recurring?: boolean;
   recurrence_type?: "monthly" | "yearly";
   recurrence_count?: number;
+  recurrence_group_id?: string; // ID para agrupar recorrências
   recurrence_start_date?: string;
   recurrence_end_date?: string;
   original_amount?: number;
@@ -60,28 +62,48 @@ export const useTransactions = () => {
       return [transaction];
     }
 
-    const startDate = new Date(transaction.date);
-    let currentDate = new Date(startDate);
+    const recurrenceGroupId = uuidv4(); // Gera um ID único para o grupo
+
+    // Parse local da data no formato yyyy-MM-dd para evitar timezone
+    const [sy, sm, sd] = transaction.date.split('-').map(Number);
+    let currentYear = sy;
+    let currentMonth = sm; // 1-12
+    let currentDay = sd;
+
     let count = 0;
     const maxCount = transaction.recurrence_count || 1;
 
     while (count < maxCount) {
+      const y = currentYear;
+      const m = String(currentMonth).padStart(2, '0');
+      const d = String(currentDay).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+
       transactions.push({
         ...transaction,
-        date: format(currentDate, 'yyyy-MM-dd'),
+        date: dateStr,
+        is_recurring: true, // Todas são recorrentes
+        recurrence_group_id: recurrenceGroupId, // Associa ao mesmo grupo
         // Primeira transação mantém recorrência, demais são únicas
-        is_recurring: count === 0 ? true : false,
         recurrence_count: count === 0 ? maxCount : undefined,
         recurrence_type: count === 0 ? transaction.recurrence_type : undefined,
         recurrence_start_date: undefined,
         recurrence_end_date: undefined,
       });
 
-      // Próxima data baseada no tipo de recorrência
+      // Próxima data baseada no tipo de recorrência (cuidando de overflow de meses/dias)
       if (transaction.recurrence_type === 'monthly') {
-        currentDate = addMonths(currentDate, 1);
+        const next = new Date(currentYear, currentMonth - 1, currentDay);
+        next.setMonth(next.getMonth() + 1);
+        currentYear = next.getFullYear();
+        currentMonth = next.getMonth() + 1;
+        currentDay = next.getDate();
       } else if (transaction.recurrence_type === 'yearly') {
-        currentDate = addYears(currentDate, 1);
+        const next = new Date(currentYear, currentMonth - 1, currentDay);
+        next.setFullYear(next.getFullYear() + 1);
+        currentYear = next.getFullYear();
+        currentMonth = next.getMonth() + 1;
+        currentDay = next.getDate();
       }
       
       count++;
@@ -178,41 +200,30 @@ export const useTransactions = () => {
   };
 
   const deleteAllRecurringTransactions = async (originalTransaction: Transaction) => {
-    if (!user) return;
+    if (!user || !originalTransaction.recurrence_group_id) return;
 
     try {
-      // Busca todas as transações com a mesma descrição, categoria, valor e tipo (grupo recorrente)
-      const { data: relatedTransactions, error: fetchError } = await supabase
+      // Deleta todas as transações com o mesmo recurrence_group_id
+      const { error } = await supabase
         .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('description', originalTransaction.description)
-        .eq('category', originalTransaction.category)
-        .eq('type', originalTransaction.type)
-        .gte('date', originalTransaction.date); // Apenas da data atual em diante
-
-      if (fetchError) throw fetchError;
-
-      if (relatedTransactions && relatedTransactions.length > 0) {
-        const ids = relatedTransactions.map(t => t.id);
-        
-        const { error } = await supabase
-          .from('transactions')
-          .delete()
-          .in('id', ids)
-          .eq('user_id', user.id);
-
-        if (error) throw error;
-        
-        setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
-        toast({
-          title: "Transações recorrentes excluídas",
-          description: `${relatedTransactions.length} transações removidas com sucesso!`,
+        .delete()
+        .match({ 
+          user_id: user.id,
+          recurrence_group_id: originalTransaction.recurrence_group_id 
         });
-      }
+
+      if (error) throw error;
+
+      // Remove do estado local
+      setTransactions(prev => prev.filter(t => t.recurrence_group_id !== originalTransaction.recurrence_group_id));
+
+      toast({
+        title: "Transações recorrentes excluídas",
+        description: "Todas as transações recorrentes foram removidas.",
+      });
     } catch (error: any) {
       toast({
-        title: "Erro ao excluir transações recorrentes",
+        title: "Erro ao excluir transações",
         description: error.message,
         variant: "destructive",
       });

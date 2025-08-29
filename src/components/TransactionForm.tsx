@@ -55,11 +55,18 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
         discount_amount: initialData.discount_amount || 0
       };
     }
+    // Criar data atual com formatação manual para evitar problemas de timezone
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+    
     return {
       type: "expense",
       description: "",
       amount: 0,
-      date: format(new Date(), "yyyy-MM-dd"),
+      date: todayString,
       category: "",
       status: "paid",
       is_recurring: false,
@@ -69,81 +76,116 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
       discount_amount: 0
     };
   });
-  const [selectedDate, setSelectedDate] = useState<Date>(() => 
-    initialData ? new Date(initialData.date) : new Date()
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    if (initialData) {
+      // Criar data a partir da string no fuso horário local
+      const dateParts = initialData.date.split('-');
+      return new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+    }
+    // Criar data atual no fuso horário local
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  });
+
+  // Estado para controlar o valor como string
+  const [amountString, setAmountString] = useState(
+    initialData?.amount ? String(initialData.amount).replace('.', ',') : ''
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.description && formData.amount > 0 && formData.category) {
-      onSubmit(formData);
+    
+    // Converte o valor string para número antes de enviar
+    const amount = parseFloat(amountString.replace(',', '.')) || 0;
+    
+    if (formData.description && amount > 0 && formData.category) {
+      onSubmit({ ...formData, amount });
     }
   };
 
+  /**
+   * Manipula a seleção de data do calendário
+   * Garante que a data seja formatada corretamente sem problemas de timezone
+   */
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
-      setFormData(prev => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
+      // Formatação manual para evitar qualquer problema de timezone
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+      setFormData(prev => ({ ...prev, date: dateString }));
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{isEditing ? "Editar Transação" : "Nova Transação"}</CardTitle>
-              <CardDescription>
-                {isEditing ? "Modifique os dados da transação" : "Adicione uma receita ou despesa"}
-              </CardDescription>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
+      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border-0 shadow-xl">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
+          <div className="space-y-1">
+            <CardTitle className="text-xl font-medium text-foreground">
+              {isEditing ? "Editar Transação" : "Nova Transação"}
+            </CardTitle>
+            <CardDescription className="text-sm text-secondary">
+              {isEditing ? "Modifique os dados da transação" : "Adicione uma nova receita ou despesa"}
+            </CardDescription>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-9 w-9 p-0 hover:bg-card"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <CardContent className="pt-0">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Tipo */}
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: "income" | "expense") => 
-                  setFormData(prev => ({ ...prev, type: value, category: "" }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">Receita</SelectItem>
-                  <SelectItem value="expense">Despesa</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground">Tipo</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={formData.type === "income" ? "income" : "outline"}
+                  onClick={() => setFormData(prev => ({ ...prev, type: "income", category: "" }))}
+                  className="w-full h-11 font-medium"
+                >
+                  Receita
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.type === "expense" ? "expense" : "outline"}
+                  onClick={() => setFormData(prev => ({ ...prev, type: "expense", category: "" }))}
+                  className="w-full h-11 font-medium"
+                >
+                  Despesa
+                </Button>
+              </div>
             </div>
 
             {/* Descrição */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Descrição</Label>
+            <div className="space-y-3">
+              <Label htmlFor="description" className="text-sm font-medium text-foreground">Descrição</Label>
               <Input
                 id="description"
                 placeholder="Ex: Salário, Aluguel, Supermercado..."
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                className="h-11"
                 required
               />
             </div>
 
             {/* Categoria */}
-            <div className="space-y-2">
-              <Label>Categoria</Label>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground">Categoria</Label>
               <Select
                 value={formData.category}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="Selecione uma categoria" />
                 </SelectTrigger>
                 <SelectContent>
@@ -157,36 +199,32 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
             </div>
 
             {/* Valor */}
-            <div className="space-y-2">
-              <Label htmlFor="amount">Valor (R$)</Label>
+            <div className="space-y-3">
+              <Label htmlFor="amount" className="text-sm font-medium text-foreground">Valor (R$)</Label>
               <Input
                 id="amount"
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
                 placeholder="0,00"
-                value={formData.amount || ""}
+                value={amountString}
+                className="h-11"
                 onChange={(e) => {
-                  const amount = parseFloat(e.target.value) || 0;
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    amount
-                  }))
+                  // Permite digitar qualquer coisa, mas filtra caracteres não numéricos
+                  const value = e.target.value.replace(/[^0-9,.]/g, '');
+                  setAmountString(value);
                 }}
                 required
               />
             </div>
 
-
             {/* Data */}
-            <div className="space-y-2">
-              <Label>Data</Label>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground">Data</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className={cn(
-                      "w-full justify-start text-left font-normal",
+                      "w-full h-11 justify-start text-left font-normal",
                       !selectedDate && "text-muted-foreground"
                     )}
                   >
@@ -207,15 +245,15 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
             </div>
 
             {/* Status */}
-            <div className="space-y-2">
-              <Label>Status</Label>
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground">Status</Label>
               <Select
                 value={formData.status}
                 onValueChange={(value: "paid" | "pending") => 
                   setFormData(prev => ({ ...prev, status: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -231,9 +269,9 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
 
             {/* Recorrência */}
             {!isEditing && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="recurring">Transação recorrente</Label>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-2">
+                  <Label htmlFor="recurring" className="text-sm font-medium text-foreground">Transação recorrente</Label>
                   <Switch
                     id="recurring"
                     checked={formData.is_recurring}
@@ -244,17 +282,17 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                 </div>
 
                 {formData.is_recurring && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-2">
-                        <Label>Tipo</Label>
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium text-foreground">Tipo</Label>
                         <Select
                           value={formData.recurrence_type}
                           onValueChange={(value: "monthly" | "yearly") => 
                             setFormData(prev => ({ ...prev, recurrence_type: value }))
                           }
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-11">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -263,23 +301,54 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Repetir (máximo 96 vezes)</Label>
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium text-foreground">Repetir (máximo 96 vezes)</Label>
                         <Input
-                          type="number"
-                          min="1"
-                          max="96"
-                          value={formData.recurrence_count || 1}
+                          type="text"
+                          value={formData.recurrence_count || ''}
+                          className="h-11"
                           onChange={(e) => {
-                            const count = Math.min(96, Math.max(1, parseInt(e.target.value) || 1));
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              recurrence_count: count 
-                            }));
+                            const value = e.target.value;
+                            // Permite entrada vazia temporariamente
+                            if (value === '') {
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                recurrence_count: undefined 
+                              }));
+                              return;
+                            }
+                            
+                            // Remove caracteres não numéricos
+                            const numericValue = value.replace(/[^0-9]/g, '');
+                            if (numericValue === '') {
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                recurrence_count: undefined 
+                              }));
+                              return;
+                            }
+                            
+                            const count = parseInt(numericValue);
+                            if (!isNaN(count)) {
+                              const validCount = Math.min(96, Math.max(1, count));
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                recurrence_count: validCount 
+                              }));
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Garante que tem um valor válido ao sair do campo
+                            if (!formData.recurrence_count) {
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                recurrence_count: 1 
+                              }));
+                            }
                           }}
                           placeholder="Ex: 12"
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-secondary">
                           A partir da data escolhida acima
                         </p>
                       </div>
@@ -290,14 +359,19 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
             )}
 
             {/* Botões */}
-            <div className="flex gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <div className="flex gap-3 pt-6">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose} 
+                className="flex-1 h-11 font-medium"
+              >
                 Cancelar
               </Button>
               <Button 
                 type="submit" 
                 variant={formData.type === "income" ? "income" : "expense"}
-                className="flex-1"
+                className="flex-1 h-11 font-medium"
               >
                 Salvar
               </Button>

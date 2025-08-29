@@ -63,22 +63,22 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-light to-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary to-primary/80 rounded-2xl mb-4 shadow-lg">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-6">
             <DollarSign className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">FinanceApp</h1>
-          <p className="text-muted-foreground">Controle financeiro pessoal</p>
+          <h1 className="text-3xl font-semibold text-foreground mb-2">FinanceApp</h1>
+          <p className="text-muted-foreground text-lg">Controle financeiro pessoal</p>
         </div>
 
-        <Card className="shadow-xl border-0">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-xl font-semibold">
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="space-y-2 pb-6">
+            <CardTitle className="text-2xl font-medium text-center">
               {isSignUp ? 'Criar Conta' : 'Entrar'}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-center text-muted-foreground">
               {isSignUp 
                 ? 'Crie sua conta para começar a usar o controle financeiro'
                 : 'Digite suas credenciais para acessar sua conta'
@@ -87,15 +87,15 @@ const Login = () => {
           </CardHeader>
           <CardContent>
             <Tabs value={isSignUp ? "signup" : "signin"} onValueChange={(value) => setIsSignUp(value === "signup")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="signin">Entrar</TabsTrigger>
-                <TabsTrigger value="signup">Criar Conta</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+                <TabsTrigger value="signin" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Entrar</TabsTrigger>
+                <TabsTrigger value="signup" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Criar Conta</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="signin" className="space-y-4 mt-4">
-                <form onSubmit={handleAuth} className="space-y-4">
+              <TabsContent value="signin" className="space-y-6 mt-6">
+                <form onSubmit={handleAuth} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email" className="text-sm font-medium text-foreground">Email</Label>
                     <Input
                       id="email"
                       type="email"
@@ -103,10 +103,11 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className="h-11 border-secondary focus:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
+                    <Label htmlFor="password" className="text-sm font-medium text-foreground">Senha</Label>
                     <Input
                       id="password"
                       type="password"
@@ -114,18 +115,19 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
+                      className="h-11 border-secondary focus:border-primary"
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading} variant="primary">
+                  <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg" disabled={isLoading}>
                     {isLoading ? "Entrando..." : "Entrar"}
                   </Button>
                 </form>
               </TabsContent>
               
-              <TabsContent value="signup" className="space-y-4 mt-4">
-                <form onSubmit={handleAuth} className="space-y-4">
+              <TabsContent value="signup" className="space-y-6 mt-6">
+                <form onSubmit={handleAuth} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
+                    <Label htmlFor="signup-email" className="text-sm font-medium text-foreground">Email</Label>
                     <Input
                       id="signup-email"
                       type="email"
@@ -133,10 +135,11 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className="h-11 border-secondary focus:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Senha</Label>
+                    <Label htmlFor="signup-password" className="text-sm font-medium text-foreground">Senha</Label>
                     <Input
                       id="signup-password"
                       type="password"
@@ -145,23 +148,26 @@ const Login = () => {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={6}
+                      className="h-11 border-secondary focus:border-primary"
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading} variant="primary">
+                  <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg" disabled={isLoading}>
                     {isLoading ? "Criando conta..." : "Criar Conta"}
                   </Button>
                 </form>
               </TabsContent>
             </Tabs>
             
-            <div className="mt-6 p-4 bg-accent rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-4 h-4 text-accent-foreground" />
-                <span className="text-sm font-medium text-accent-foreground">Conta de demonstração</span>
+            <div className="mt-8 p-4 bg-muted/30 rounded-xl border border-secondary/20">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Shield className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm font-medium text-foreground">Conta de demonstração</span>
               </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div>Email: <span className="font-mono">demo@financas.com</span></div>
-                <div>Senha: <span className="font-mono">123456</span></div>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <div>Email: <span className="font-mono text-foreground">demo@financas.com</span></div>
+                <div>Senha: <span className="font-mono text-foreground">123456</span></div>
               </div>
             </div>
           </CardContent>

@@ -50,8 +50,14 @@ const Dashboard = () => {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   
+  const parseLocalDate = (dateString: string) => {
+    // Converte 'yyyy-MM-dd' para Date local sem hora
+    const [y, m, d] = dateString.split("-");
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  };
+  
   const currentMonthTransactions = transactions.filter(transaction => {
-    const transactionDate = new Date(transaction.date);
+    const transactionDate = parseLocalDate(transaction.date);
     return transactionDate >= monthStart && transactionDate <= monthEnd;
   });
 
@@ -72,7 +78,7 @@ const Dashboard = () => {
     
     // Agrupar transações por mês/ano
     const transactionsByMonth = allPaidTransactions.reduce((acc, transaction) => {
-      const transactionDate = new Date(transaction.date);
+      const transactionDate = parseLocalDate(transaction.date);
       const monthKey = format(transactionDate, "yyyy-MM");
       
       if (!acc[monthKey]) {
@@ -124,48 +130,50 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-card border-b shadow-sm">
-        <div className="container mx-auto px-4 py-4">
+      <div className="bg-card border-b border-secondary/20">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary to-primary/80 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
+                <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">FinanceApp</h1>
-                <p className="text-sm text-muted-foreground">Controle Financeiro</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">FinanceApp</h1>
+                <p className="text-xs sm:text-sm text-secondary hidden sm:block">Controle Financeiro Pessoal</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
+            <Button variant="outline" size="sm" onClick={handleLogout} className="h-9 border-secondary/30 text-secondary hover:bg-card hover:border-secondary">
+              <LogOut className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6 space-y-6">
+      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
         {/* Navegação do Mês */}
-        <Card>
-          <CardHeader>
+        <Card className="border-0 shadow-sm bg-card">
+          <CardHeader className="pb-4 px-4 sm:px-6">
             <div className="flex items-center justify-between">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigateMonth("prev")}
+                className="h-9 w-9 p-0 border-secondary/30 hover:bg-card hover:border-secondary"
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <div className="text-center">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  {format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}
+              <div className="text-center flex-1 mx-4">
+                <CardTitle className="flex items-center justify-center gap-2 sm:gap-3 text-lg sm:text-xl font-medium text-foreground">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                  <span className="text-sm sm:text-xl">{format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}</span>
                 </CardTitle>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigateMonth("next")}
+                className="h-9 w-9 p-0 border-secondary/30 hover:bg-card hover:border-secondary"
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
@@ -174,52 +182,60 @@ const Dashboard = () => {
         </Card>
 
         {/* Cards de Resumo */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="bg-income-light border-income/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-income">Receitas</CardTitle>
-              <TrendingUp className="h-4 w-4 text-income" />
+        <div className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
+          <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Receitas</CardTitle>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-income">
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+              <div className="text-lg sm:text-2xl font-semibold text-foreground">
                 {formatCurrency(monthlyIncome)}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-expense-light border-expense/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-expense">Despesas</CardTitle>
-              <TrendingDown className="h-4 w-4 text-expense" />
+          <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Despesas</CardTitle>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-destructive/10 rounded-xl flex items-center justify-center">
+                <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-expense">
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+              <div className="text-lg sm:text-2xl font-semibold text-foreground">
                 {formatCurrency(monthlyExpenses)}
               </div>
             </CardContent>
           </Card>
 
-          <Card className={`${monthlyBalance >= 0 ? 'bg-success-light border-success/20' : 'bg-expense-light border-expense/20'}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className={`text-sm font-medium ${monthlyBalance >= 0 ? 'text-success' : 'text-expense'}`}>
+          <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card col-span-2 lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">
                 Balanço do Mês
               </CardTitle>
-              <DollarSign className={`h-4 w-4 ${monthlyBalance >= 0 ? 'text-success' : 'text-expense'}`} />
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${monthlyBalance >= 0 ? 'bg-primary/10' : 'bg-destructive/10'}`}>
+                <DollarSign className={`h-4 w-4 sm:h-5 sm:w-5 ${monthlyBalance >= 0 ? 'text-primary' : 'text-destructive'}`} />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${monthlyBalance >= 0 ? 'text-success' : 'text-expense'}`}>
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+              <div className={`text-lg sm:text-2xl font-semibold ${monthlyBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
                 {formatCurrency(monthlyBalance)}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-primary-light border-primary/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-primary">Saldo Acumulado</CardTitle>
-              <DollarSign className="h-4 w-4 text-primary" />
+          <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card col-span-2 lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 px-4 sm:px-6 pt-4 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Saldo Acumulado</CardTitle>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+              <div className="text-lg sm:text-2xl font-semibold text-primary">
                 {formatCurrency(accumulatedBalance)}
               </div>
             </CardContent>
@@ -227,12 +243,11 @@ const Dashboard = () => {
         </div>
 
         {/* Botão Adicionar Transação */}
-        <div className="flex justify-center">
+        <div className="flex justify-center px-4">
           <Button 
             onClick={() => setShowTransactionForm(true)}
             size="lg"
-            variant="primary"
-            className="shadow-lg"
+            className="bg-primary hover:bg-primary/90 text-white shadow-lg px-6 sm:px-8 py-3 h-12 rounded-xl font-medium w-full sm:w-auto transition-all duration-200"
           >
             <Plus className="w-5 h-5 mr-2" />
             Nova Transação
@@ -240,16 +255,16 @@ const Dashboard = () => {
         </div>
 
         {/* Lista de Transações */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Transações do Mês</CardTitle>
-            <CardDescription>
+        <Card className="border-0 shadow-sm bg-card">
+          <CardHeader className="pb-4 px-4 sm:px-6">
+            <CardTitle className="text-lg sm:text-xl font-medium text-foreground">Transações do Mês</CardTitle>
+            <CardDescription className="text-sm text-secondary">
               {currentMonthTransactions.length} transação(ões) registrada(s)
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {loading ? (
-              <div className="flex justify-center py-8">
+              <div className="flex justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : (
