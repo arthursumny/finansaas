@@ -14,25 +14,6 @@
   - ✅ Distribuição de gastos por categoria
   - ✅ Filtro por período (implementado com toggle de visibilidade)
 
-#### 🔍 Filtros e Busca
-- [ ] **Filtros avançados nas transações**
-  - Por período (data início/fim)
-  - Por categoria
-  - Por valor (mínimo/máximo)
-  - Por tipo (receita/despesa)
-  - Por status (pago/pendente)
-
-- [ ] **Busca inteligente**
-  - Buscar por descrição
-  - Buscar por valor
-  - Autocomplete
-
-#### 🎨 Interface
-- [ ] **Modo escuro/claro**
-  - Toggle no header
-  - Persistir preferência no localStorage
-  - Usar CSS variables para temas
-
 
 ### 🟡 **Prioridade Média - Esforço Moderado**
 
