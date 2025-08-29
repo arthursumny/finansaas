@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { DollarSign, Shield } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { Shield } from "lucide-react";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -17,6 +18,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signIn, signUp } = useAuth();
+  const { actualTheme } = useTheme();
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
@@ -66,11 +68,13 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-6">
-            <DollarSign className="w-8 h-8 text-primary-foreground" />
+          <div className="flex justify-center mb-6">
+            <img 
+              src={actualTheme === 'dark' ? '/logo_branca.png' : '/logo_preta.png'} 
+              alt="FinanSaaS" 
+              className="h-16 w-auto"
+            />
           </div>
-          <h1 className="text-3xl font-semibold text-foreground mb-2">FinanceApp</h1>
-          <p className="text-muted-foreground text-lg">Controle financeiro pessoal</p>
         </div>
 
         <Card className="border-0 shadow-sm">

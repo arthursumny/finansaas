@@ -41,7 +41,7 @@ const SmartSearch = ({
 
   // Carregar buscas recentes do localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('financeapp-recent-searches');
+    const saved = localStorage.getItem('FinanSaaS-recent-searches');
     if (saved) {
       try {
         setRecentSearches(JSON.parse(saved));
@@ -57,7 +57,7 @@ const SmartSearch = ({
     
     const updated = [searchTerm, ...recentSearches.filter(s => s !== searchTerm)].slice(0, 5);
     setRecentSearches(updated);
-    localStorage.setItem('financeapp-recent-searches', JSON.stringify(updated));
+    localStorage.setItem('FinanSaaS-recent-searches', JSON.stringify(updated));
   };
 
   /**
@@ -218,7 +218,7 @@ const SmartSearch = ({
     e.stopPropagation();
     const updated = recentSearches.filter(s => s !== searchTerm);
     setRecentSearches(updated);
-    localStorage.setItem('financeapp-recent-searches', JSON.stringify(updated));
+    localStorage.setItem('FinanSaaS-recent-searches', JSON.stringify(updated));
   };
 
   return (

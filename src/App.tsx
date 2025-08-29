@@ -14,7 +14,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="system" storageKey="financeapp-ui-theme">
+    <ThemeProvider defaultTheme="system" storageKey="FinanSaaS-ui-theme">
       <AuthProvider>
         <TooltipProvider>
           <Toaster />

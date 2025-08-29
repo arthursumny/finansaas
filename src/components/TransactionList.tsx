@@ -107,11 +107,136 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {transactions.map((transaction) => (
         <Card key={transaction.id} className="transition-all hover:shadow-lg border-0 shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-3 sm:p-6">
+            {/* Layout Mobile: Stack Vertical */}
+            <div className="block sm:hidden">
+              <div className="flex items-start gap-3 mb-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  transaction.type === "income" 
+                    ? "bg-primary/10 text-primary" 
+                    : "bg-destructive/10 text-destructive"
+                }`}>
+                  {transaction.type === "income" ? (
+                    <TrendingUp className="w-5 h-5" />
+                  ) : (
+                    <TrendingDown className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-foreground text-sm truncate">{transaction.description}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge 
+                      variant="secondary" 
+                      className="text-xs font-medium bg-card text-secondary border-0"
+                    >
+                      {transaction.category}
+                    </Badge>
+                    {transaction.is_recurring && (
+                      <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
+                        Rec.
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-lg font-bold ${
+                    transaction.type === "income" ? "text-primary" : "text-destructive"
+                  }`}>
+                    {transaction.type === "income" ? "+" : "-"}{formatCurrency(transaction.amount)}
+                  </div>
+                  {transaction.discount_amount && transaction.discount_amount > 0 && (
+                    <div className="text-xs text-secondary mt-1">
+                      <span className="line-through">{formatCurrency(transaction.original_amount || 0)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="flex items-center gap-1 text-secondary">
+                    <Calendar className="w-3 h-3" />
+                    {formatDate(transaction.date)}
+                  </span>
+                  <Badge 
+                    variant={transaction.status === "paid" ? "default" : "secondary"}
+                    className={`text-xs font-medium ${
+                      transaction.status === "paid" 
+                        ? "bg-primary text-white"
+                        : "bg-secondary/50 text-secondary border-0"
+                    }`}
+                  >
+                    {transaction.status === "paid" 
+                      ? (transaction.type === "income" ? "Recebido" : "Pago")
+                      : (transaction.type === "income" ? "A Receber" : "A Pagar")
+                    }
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleMarkAsPaid(transaction)}
+                    className="h-8 w-8 hover:bg-card"
+                    title={transaction.status === "paid" ? "Marcar como pendente" : "Marcar como pago"}
+                  >
+                    {transaction.status === "paid" ? (
+                      <Check className="w-3 h-3 text-primary" />
+                    ) : (
+                      <Clock className="w-3 h-3 text-secondary" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEdit(transaction)}
+                    className="h-8 w-8 hover:bg-card"
+                    title="Editar transação"
+                  >
+                    <Edit className="w-3 h-3 text-secondary hover:text-foreground" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(transaction.id)}
+                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    title="Excluir transação"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+              
+              {transaction.is_recurring && (
+                <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleFullDiscount(transaction)}
+                    className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium flex-1"
+                    title="Abater valor inteiro"
+                  >
+                    Abater
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onDeleteAllRecurring(transaction)}
+                    className="h-7 text-xs px-2 text-destructive hover:text-destructive hover:bg-destructive/10 font-medium flex-1"
+                    title="Excluir todas as recorrências"
+                  >
+                    Excluir Todas
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Layout Desktop: Horizontal */}
+            <div className="hidden sm:flex items-center justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                   transaction.type === "income" 

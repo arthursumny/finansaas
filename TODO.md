@@ -1,4 +1,4 @@
-# 📋 TODO - FinanceApp
+# 📋 TODO - FinanSaaS
 
 ## 🎯 Funcionalidades Futuras
 
