@@ -5,14 +5,14 @@
 ### 🟢 **Prioridade Alta - Fácil Implementação**
 
 #### 📊 Gráficos e Visualizações
-- [ ] **Gráfico de evolução mensal** (receitas vs despesas)
-  - Usar Chart.js ou Recharts
-  - Mostrar últimos 6 meses
-  - Implementar no Dashboard
+- [x] **Gráfico de evolução mensal** (receitas vs despesas) ✅
+  - ✅ Usar Chart.js ou Recharts (Recharts implementado)
+  - ✅ Mostrar últimos 6 meses
+  - ✅ Implementar no Dashboard
 
-- [ ] **Gráfico de pizza por categorias**
-  - Distribuição de gastos por categoria
-  - Filtro por período
+- [x] **Gráfico de pizza por categorias** ✅
+  - ✅ Distribuição de gastos por categoria
+  - ✅ Filtro por período (implementado com toggle de visibilidade)
 
 #### 🔍 Filtros e Busca
 - [ ] **Filtros avançados nas transações**
@@ -33,10 +33,6 @@
   - Persistir preferência no localStorage
   - Usar CSS variables para temas
 
-- [ ] **Exportação de dados**
-  - Exportar transações para PDF
-  - Exportar para Excel/CSV
-  - Relatório mensal em PDF
 
 ### 🟡 **Prioridade Média - Esforço Moderado**
 

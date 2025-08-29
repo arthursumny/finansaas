@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   BarChart3
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,6 +25,8 @@ import TransactionList from "@/components/TransactionList";
 import { CategoryManager } from "@/components/CategoryManager";
 import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
 import CategoryPieChart from "@/components/charts/CategoryPieChart";
+import TransactionFiltersComponent from "@/components/filters/TransactionFilters";
+import { useTransactionFilters } from "@/hooks/useTransactionFilters";
 
 const Dashboard = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -31,8 +34,22 @@ const Dashboard = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions } = useTransactions();
+  
+  // Hook para filtros avançados
+  const {
+    filters,
+    filteredTransactions,
+    isFiltersOpen,
+    hasActiveFilters,
+    activeFiltersCount,
+    filteredStats,
+    updateFilters,
+    clearFilters,
+    toggleFilters
+  } = useTransactionFilters(transactions);
 
   const handleLogout = async () => {
     await signOut();
@@ -64,10 +81,13 @@ const Dashboard = () => {
     return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
   };
   
-  const currentMonthTransactions = transactions.filter(transaction => {
-    const transactionDate = parseLocalDate(transaction.date);
-    return transactionDate >= monthStart && transactionDate <= monthEnd;
-  });
+  // Aplicar filtros avançados primeiro, depois filtro por mês (se não há filtro de data personalizado)
+  const currentMonthTransactions = hasActiveFilters && (filters.dateStart || filters.dateEnd) 
+    ? filteredTransactions // Se há filtro de data personalizado, usar apenas filtros avançados
+    : filteredTransactions.filter(transaction => {
+        const transactionDate = parseLocalDate(transaction.date);
+        return transactionDate >= monthStart && transactionDate <= monthEnd;
+      });
 
   // Calcular totais
   const monthlyIncome = currentMonthTransactions
@@ -189,6 +209,7 @@ const Dashboard = () => {
                   <span className="hidden sm:inline">Categorias</span>
                 </Button>
               )}
+              <ThemeToggle />
               <Button variant="outline" size="sm" onClick={handleLogout} className="h-9 border-secondary/30 text-secondary hover:bg-card hover:border-secondary">
                 <LogOut className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Sair</span>
@@ -323,12 +344,32 @@ const Dashboard = () => {
           </Button>
         </div>
 
+        {/* Filtros Avançados */}
+        <TransactionFiltersComponent
+          filters={filters}
+          onFiltersChange={updateFilters}
+          onClearFilters={clearFilters}
+          isOpen={isFiltersOpen}
+          onToggle={toggleFilters}
+          activeFiltersCount={activeFiltersCount}
+          transactions={transactions}
+        />
+
+
+
         {/* Lista de Transações */}
         <Card className="border-0 shadow-sm bg-card">
           <CardHeader className="pb-4 px-4 sm:px-6">
-            <CardTitle className="text-lg sm:text-xl font-medium text-foreground">Transações do Mês</CardTitle>
+            <CardTitle className="text-lg sm:text-xl font-medium text-foreground">
+              {hasActiveFilters ? 'Transações Filtradas' : 'Transações do Mês'}
+            </CardTitle>
             <CardDescription className="text-sm text-secondary">
-              {currentMonthTransactions.length} transação(ões) registrada(s)
+              {currentMonthTransactions.length} transação(ões) {hasActiveFilters ? 'encontrada(s)' : 'registrada(s)'}
+              {hasActiveFilters && (
+                <span className="ml-2 text-primary font-medium">
+                  ({activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''} ativo{activeFiltersCount > 1 ? 's' : ''})
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">

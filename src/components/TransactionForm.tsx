@@ -188,7 +188,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                 </SelectTrigger>
                 <SelectContent>
                   {categoriesLoading ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="loading" disabled>
                       Carregando categorias...
                     </SelectItem>
                   ) : (
