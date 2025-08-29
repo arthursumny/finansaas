@@ -10,7 +10,10 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  Settings,
+  ArrowLeft,
+  BarChart3
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,11 +21,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTransactions, Transaction } from "@/hooks/useTransactions";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
+import { CategoryManager } from "@/components/CategoryManager";
+import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
+import CategoryPieChart from "@/components/charts/CategoryPieChart";
 
 const Dashboard = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showCharts, setShowCharts] = useState(false);
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions } = useTransactions();
 
@@ -134,18 +142,58 @@ const Dashboard = () => {
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
+              {showCategoryManager && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCategoryManager(false)}
+                  className="h-9"
+                >
+                  <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Voltar</span>
+                </Button>
+              )}
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
                 <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">FinanceApp</h1>
-                <p className="text-xs sm:text-sm text-secondary hidden sm:block">Controle Financeiro Pessoal</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                  {showCategoryManager ? 'Categorias' : 'FinanceApp'}
+                </h1>
+                <p className="text-xs sm:text-sm text-secondary hidden sm:block">
+                  {showCategoryManager ? 'Gerenciar Categorias' : 'Controle Financeiro Pessoal'}
+                </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout} className="h-9 border-secondary/30 text-secondary hover:bg-card hover:border-secondary">
-              <LogOut className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Sair</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              {!showCategoryManager && (
+                <Button
+                  variant={showCharts ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowCharts(!showCharts)}
+                  className={`h-9 ${showCharts ? 'bg-primary text-white' : 'border-secondary/30 hover:bg-card hover:border-secondary'}`}
+                  title={showCharts ? "Ocultar gráficos" : "Mostrar gráficos"}
+                >
+                  <BarChart3 className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
+                </Button>
+              )}
+              {!showCategoryManager && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCategoryManager(true)}
+                  className="h-9 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                >
+                  <Settings className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Categorias</span>
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={handleLogout} className="h-9 border-secondary/30 text-secondary hover:bg-card hover:border-secondary">
+                <LogOut className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sair</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -242,6 +290,27 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Seção de Gráficos */}
+        {showCharts && (
+          <div className="space-y-6">
+            <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
+              <MonthlyEvolutionChart transactions={transactions} />
+              <CategoryPieChart 
+                transactions={currentMonthTransactions} 
+                type="expense" 
+                title="Despesas por Categoria"
+              />
+            </div>
+            <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
+              <CategoryPieChart 
+                transactions={currentMonthTransactions} 
+                type="income" 
+                title="Receitas por Categoria"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Botão Adicionar Transação */}
         <div className="flex justify-center px-4">
           <Button 
@@ -294,8 +363,16 @@ const Dashboard = () => {
           initialData={editingTransaction}
           onSubmit={handleEditTransaction}
           onClose={() => setEditingTransaction(null)}
-          isEditing={true}
         />
+      )}
+
+      {/* Gerenciador de Categorias */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 bg-background z-50 overflow-auto">
+          <div className="container mx-auto px-4 sm:px-6 py-6">
+            <CategoryManager onBack={() => setShowCategoryManager(false)} />
+          </div>
+        </div>
       )}
     </div>
   );

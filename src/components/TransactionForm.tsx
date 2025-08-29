@@ -35,12 +35,8 @@ interface TransactionFormProps {
   isEditing?: boolean;
 }
 
-const categories = {
-  income: ["Salário", "Freelance", "Investimentos", "Outros"],
-  expense: ["Moradia", "Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Contas", "Outros"]
-};
-
 const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
+  const { getCategoryNamesByType, loading: categoriesLoading } = useCategories();
   const [formData, setFormData] = useState<TransactionFormData>(() => {
     if (initialData) {
       return {
@@ -191,11 +187,17 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   <SelectValue placeholder="Selecione uma categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories[formData.type].map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
+                  {categoriesLoading ? (
+                    <SelectItem value="" disabled>
+                      Carregando categorias...
                     </SelectItem>
-                  ))}
+                  ) : (
+                    getCategoryNamesByType(formData.type).map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
