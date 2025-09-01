@@ -127,6 +127,30 @@ const TransactionFiltersComponent = ({
                 transactions={transactions}
                 value={localFilters.searchTerm || ''}
                 onChange={(value) => updateFilter('searchTerm', value)}
+                onQuickFilter={(filterType) => {
+                  // Aplicar filtros rápidos
+                  const [action, value] = filterType.split(':');
+                  if (action === 'filter') {
+                    switch (value) {
+                      case 'income':
+                        updateFilter('type', 'income');
+                        break;
+                      case 'expense':
+                        updateFilter('type', 'expense');
+                        break;
+                      case 'pending':
+                        updateFilter('status', 'pending');
+                        break;
+                      case 'thisMonth':
+                        const now = new Date();
+                        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                        updateFilter('dateStart', startOfMonth);
+                        updateFilter('dateEnd', endOfMonth);
+                        break;
+                    }
+                  }
+                }}
                 placeholder="Buscar transações, categorias, valores..."
               />
             </div>

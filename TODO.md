@@ -1,4 +1,4 @@
-# 📋 TODO - FinanSaaS
+# 📋 TODO - FinanceApp
 
 ## 🎯 Funcionalidades Futuras
 
@@ -14,14 +14,59 @@
   - ✅ Distribuição de gastos por categoria
   - ✅ Filtro por período (implementado com toggle de visibilidade)
 
+#### 🔍 Filtros e Busca
+- [x] **Filtros avançados nas transações** ✅
+  - ✅ Por período (data início/fim)
+  - ✅ Por categoria
+  - ✅ Por valor (mínimo/máximo)
+  - ✅ Por tipo (receita/despesa)
+  - ✅ Por status (pago/pendente)
+  - ✅ Integração completa no Dashboard
+  - ✅ Componente TransactionFilters funcional
+  - ✅ Hook useTransactionFilters implementado
+
+- [x] **Busca inteligente** ✅
+  - ✅ Buscar por descrição
+  - ✅ Buscar por valor
+  - ✅ Autocomplete
+  - ✅ Sugestões baseadas em histórico de transações
+  - ✅ Navegação por teclado (setas, Enter, Escape)
+  - ✅ Filtros rápidos (receita, despesa, pendente, este mês)
+  - ✅ Busca por valor (exato e aproximado)
+  - ✅ Busca por data
+  - ✅ Histórico de buscas recentes
+  - ✅ Integração com sistema de filtros
+
+#### 🎨 Interface
+- [x] **Modo escuro/claro** ✅
+  - ✅ Toggle no header (ThemeToggle component)
+  - ✅ Persistir preferência no localStorage
+  - ✅ CSS variables para temas implementadas
+  - ✅ Suporte a tema sistema (auto)
+  - ✅ Context API para gerenciamento de estado
+  - ✅ Integração completa no Dashboard
+
+- [x] **Exportação de dados** ✅
+  - ✅ Exportar transações para PDF
+  - ✅ Exportar para Excel/CSV
+  - ✅ Relatório mensal em PDF
+  - ✅ Modal de exportação com opções avançadas
+  - ✅ Tabelas profissionais com jspdf-autotable
 
 ### 🟡 **Prioridade Média - Esforço Moderado**
 
 #### 💰 Orçamento e Metas
-- [ ] **Orçamento por categoria**
-  - Definir limite mensal por categoria
-  - Alertas quando próximo do limite
-  - Barra de progresso visual
+- [x] **Orçamento por categoria** ✅
+  - ✅ Modelo de dados para orçamentos (tabela budgets)
+  - ✅ Hook useBudgets para gerenciar orçamentos
+  - ✅ Componente BudgetManager para CRUD de orçamentos
+  - ✅ Modal BudgetEditModal para criar/editar orçamentos
+  - ✅ Componente BudgetAlerts para alertas de limite
+  - ✅ Componente BudgetProgressBar para visualização
+  - ✅ Integração no Dashboard com botão de acesso
+  - ✅ Cálculo automático de status (gasto, restante, porcentagem)
+  - ✅ Alertas para orçamentos próximos ou acima do limite
+  - ✅ Suporte a períodos mensais e anuais
 
 - [ ] **Metas de economia**
   - Definir meta mensal/anual
@@ -118,6 +163,11 @@
   - Compressão de imagens
 
 ### 📋 **Roadmap Sugerido**
+
+#### **Fase 1 (1-2 semanas)**
+1. Gráficos básicos (Chart.js)
+2. Filtros avançados
+3. Modo escuro
 
 #### **Fase 2 (2-3 semanas)**
 1. Orçamento por categoria

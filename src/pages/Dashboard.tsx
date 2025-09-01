@@ -13,7 +13,9 @@ import {
   LogOut,
   Settings,
   ArrowLeft,
-  BarChart3
+  BarChart3,
+  Download,
+  Target
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
@@ -23,11 +25,14 @@ import { useTransactions, Transaction } from "@/hooks/useTransactions";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
 import { CategoryManager } from "@/components/CategoryManager";
+import { BudgetManager } from "@/components/BudgetManager";
 import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
 import CategoryPieChart from "@/components/charts/CategoryPieChart";
 import TransactionFiltersComponent from "@/components/filters/TransactionFilters";
 import { useTransactionFilters } from "@/hooks/useTransactionFilters";
 import { useTheme } from "@/contexts/ThemeContext";
+import ExportModal from "@/components/ExportModal";
+import RecurringUpdateModal from "@/components/RecurringUpdateModal";
 
 const Dashboard = () => {
   const { theme } = useTheme();
@@ -38,10 +43,17 @@ const Dashboard = () => {
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showBudgetManager, setShowBudgetManager] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [recurringUpdateModal, setRecurringUpdateModal] = useState<{
+    isOpen: boolean;
+    transactionData?: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+    fieldName?: string;
+  }>({ isOpen: false });
 
   const { user, signOut } = useAuth();
-  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions } = useTransactions();
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
   
   // Hook para filtros avançados
   const {
@@ -67,8 +79,61 @@ const Dashboard = () => {
 
   const handleEditTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     if (editingTransaction) {
+      // Se for uma transação recorrente e algum campo foi alterado, perguntar se quer atualizar todas
+      if (editingTransaction.is_recurring && editingTransaction.recurrence_group_id) {
+        const changedFields = [];
+        
+        if (editingTransaction.category !== transactionData.category) {
+          changedFields.push('a categoria');
+        }
+        if (editingTransaction.description !== transactionData.description) {
+          changedFields.push('a descrição');
+        }
+        if (editingTransaction.amount !== transactionData.amount) {
+           changedFields.push('o valor');
+         }
+         if (editingTransaction.type !== transactionData.type) {
+           changedFields.push('o tipo');
+         }
+         if (editingTransaction.date !== transactionData.date) {
+           changedFields.push('a data');
+         }
+         if (editingTransaction.status !== transactionData.status) {
+           changedFields.push('o status');
+         }
+        
+        if (changedFields.length > 0) {
+          const fieldName = changedFields.length === 1 
+            ? changedFields[0] 
+            : changedFields.slice(0, -1).join(', ') + ' e ' + changedFields[changedFields.length - 1];
+          
+          setRecurringUpdateModal({
+            isOpen: true,
+            transactionData,
+            fieldName
+          });
+          return;
+        }
+      }
+      
       await updateTransaction(editingTransaction.id, transactionData);
       setEditingTransaction(null);
+    }
+  };
+
+  const handleRecurringUpdateConfirm = async () => {
+    if (editingTransaction && recurringUpdateModal.transactionData) {
+      await updateAllRecurringTransactions(editingTransaction, recurringUpdateModal.transactionData);
+      setEditingTransaction(null);
+      setRecurringUpdateModal({ isOpen: false });
+    }
+  };
+
+  const handleRecurringUpdateCancel = async () => {
+    if (editingTransaction && recurringUpdateModal.transactionData) {
+      await updateTransaction(editingTransaction.id, recurringUpdateModal.transactionData);
+      setEditingTransaction(null);
+      setRecurringUpdateModal({ isOpen: false });
     }
   };
 
@@ -167,11 +232,14 @@ const Dashboard = () => {
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4">
-              {showCategoryManager && (
+              {(showCategoryManager || showBudgetManager) && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowCategoryManager(false)}
+                  onClick={() => {
+                    setShowCategoryManager(false);
+                    setShowBudgetManager(false);
+                  }}
                   className="h-9"
                 >
                   <ArrowLeft className="w-4 h-4 sm:mr-2" />
@@ -181,7 +249,7 @@ const Dashboard = () => {
               {showCategoryManager ? (
                 <>
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                    <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
                   <div>
                     <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
@@ -189,6 +257,20 @@ const Dashboard = () => {
                     </h1>
                     <p className="text-xs sm:text-sm text-secondary hidden sm:block">
                       Gerenciar Categorias
+                    </p>
+                  </div>
+                </>
+              ) : showBudgetManager ? (
+                <>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
+                    <Target className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                      Orçamentos
+                    </h1>
+                    <p className="text-xs sm:text-sm text-secondary hidden sm:block">
+                      Gerenciar Orçamentos por Categoria
                     </p>
                   </div>
                 </>
@@ -201,7 +283,7 @@ const Dashboard = () => {
               )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              {!showCategoryManager && (
+              {!showCategoryManager && !showBudgetManager && (
                 <Button
                   variant={showCharts ? "default" : "outline"}
                   size="sm"
@@ -213,7 +295,31 @@ const Dashboard = () => {
                   <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
                 </Button>
               )}
-              {!showCategoryManager && (
+              {!showCategoryManager && !showBudgetManager && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowExportModal(true)}
+                  className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                  title="Exportar dados"
+                >
+                  <Download className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Exportar</span>
+                </Button>
+              )}
+              {!showCategoryManager && !showBudgetManager && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBudgetManager(true)}
+                  className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                  title="Gerenciar orçamentos"
+                >
+                  <Target className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Orçamentos</span>
+                </Button>
+              )}
+              {!showCategoryManager && !showBudgetManager && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -423,6 +529,13 @@ const Dashboard = () => {
         />
       )}
 
+      {/* Modal de Exportação */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        transactions={transactions}
+      />
+
       {/* Gerenciador de Categorias */}
       {showCategoryManager && (
         <div className="fixed inset-0 bg-background z-50 overflow-auto">
@@ -431,6 +544,23 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Gerenciador de Orçamentos */}
+      {showBudgetManager && (
+        <div className="fixed inset-0 bg-background z-50 overflow-auto">
+          <div className="container mx-auto px-4 sm:px-6 py-6">
+            <BudgetManager onBack={() => setShowBudgetManager(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação para Transações Recorrentes */}
+      <RecurringUpdateModal
+        isOpen={recurringUpdateModal.isOpen}
+        onConfirm={handleRecurringUpdateConfirm}
+        onCancel={handleRecurringUpdateCancel}
+        fieldName={recurringUpdateModal.fieldName || ''}
+      />
     </div>
   );
 };

@@ -230,6 +230,55 @@ export const useTransactions = () => {
     }
   };
 
+  /**
+   * Atualiza todas as transações de um grupo recorrente
+   */
+  const updateAllRecurringTransactions = async (originalTransaction: Transaction, updates: Partial<Transaction>) => {
+    if (!user || !originalTransaction.recurrence_group_id) {
+      // Se não for recorrente, atualiza apenas a transação individual
+      return updateTransaction(originalTransaction.id, updates);
+    }
+
+    try {
+      // Data atual para comparação
+      const today = new Date();
+      const todayStr = format(today, 'yyyy-MM-dd');
+      
+      // Atualiza apenas as transações futuras (incluindo a atual) com o mesmo recurrence_group_id
+      const { data, error } = await supabase
+        .from('transactions')
+        .update(updates)
+        .match({ 
+          user_id: user.id,
+          recurrence_group_id: originalTransaction.recurrence_group_id 
+        })
+        .gte('date', todayStr) // Apenas transações de hoje em diante
+        .select();
+
+      if (error) throw error;
+
+      // Atualiza o estado local apenas para transações futuras
+      setTransactions(prev => prev.map(t => {
+        if (t.recurrence_group_id === originalTransaction.recurrence_group_id && t.date >= todayStr) {
+          return { ...t, ...updates };
+        }
+        return t;
+      }));
+
+      const updatedCount = data?.length || 0;
+      toast({
+        title: "Transações recorrentes atualizadas",
+        description: `${updatedCount} transações futuras do grupo recorrente foram atualizadas.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar transações recorrentes",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     fetchTransactions();
   }, [user]);
@@ -241,6 +290,7 @@ export const useTransactions = () => {
     updateTransaction,
     deleteTransaction,
     deleteAllRecurringTransactions,
+    updateAllRecurringTransactions,
     refetch: fetchTransactions,
   };
 };
