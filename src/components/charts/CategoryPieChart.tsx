@@ -183,7 +183,7 @@ const CategoryPieChart = ({
       <CardContent>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Gráfico */}
-          <div className="h-64">
+          <div className="h-64" data-chart="category-pie">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

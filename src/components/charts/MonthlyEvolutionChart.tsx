@@ -109,7 +109,7 @@ const MonthlyEvolutionChart = ({ transactions }: MonthlyEvolutionChartProps) => 
         </div>
       </CardHeader>
       <CardContent>
-        <div className="h-80">
+        <div className="h-80" data-chart="monthly-evolution">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}

@@ -28,7 +28,7 @@ const RecurringUpdateModal = ({ isOpen, onConfirm, onCancel, fieldName }: Recurr
         
         <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
           <p className="text-sm text-amber-800 dark:text-amber-200">
-            <strong>Atenção:</strong> Esta ação irá alterar todas as transações futuras e passadas deste grupo recorrente.
+            <strong>Atenção:</strong> Esta ação irá alterar apenas as transações futuras deste grupo recorrente (a partir de hoje).
           </p>
         </div>
 

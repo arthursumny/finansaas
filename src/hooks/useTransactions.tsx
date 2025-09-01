@@ -232,6 +232,7 @@ export const useTransactions = () => {
 
   /**
    * Atualiza todas as transações de um grupo recorrente
+   * IMPORTANTE: Esta função APENAS atualiza transações existentes, NUNCA cria novas
    */
   const updateAllRecurringTransactions = async (originalTransaction: Transaction, updates: Partial<Transaction>) => {
     if (!user || !originalTransaction.recurrence_group_id) {
@@ -244,10 +245,50 @@ export const useTransactions = () => {
       const today = new Date();
       const todayStr = format(today, 'yyyy-MM-dd');
       
+      console.log('Atualizando transações recorrentes:', {
+        recurrence_group_id: originalTransaction.recurrence_group_id,
+        todayStr,
+        updates
+      });
+      
+      // VALIDAÇÃO CRÍTICA: Remove campos que poderiam causar criação de novas transações
+      const safeUpdates = { ...updates };
+      delete safeUpdates.is_recurring;
+      delete safeUpdates.recurrence_type;
+      delete safeUpdates.recurrence_count;
+      delete safeUpdates.recurrence_group_id;
+      delete safeUpdates.id;
+      delete safeUpdates.user_id;
+      delete safeUpdates.created_at;
+      delete safeUpdates.updated_at;
+      
+      console.log('Updates seguros (sem campos de recorrência):', safeUpdates);
+      
+      // Primeiro, busca as transações que serão atualizadas para debug
+      const { data: transactionsToUpdate } = await supabase
+        .from('transactions')
+        .select('*')
+        .match({ 
+          user_id: user.id,
+          recurrence_group_id: originalTransaction.recurrence_group_id 
+        })
+        .gte('date', todayStr);
+      
+      console.log('Transações que serão atualizadas:', transactionsToUpdate);
+      
+      if (!transactionsToUpdate || transactionsToUpdate.length === 0) {
+        console.log('Nenhuma transação futura encontrada para atualizar');
+        toast({
+          title: "Nenhuma transação para atualizar",
+          description: "Não foram encontradas transações futuras deste grupo recorrente.",
+        });
+        return;
+      }
+      
       // Atualiza apenas as transações futuras (incluindo a atual) com o mesmo recurrence_group_id
       const { data, error } = await supabase
         .from('transactions')
-        .update(updates)
+        .update(safeUpdates)
         .match({ 
           user_id: user.id,
           recurrence_group_id: originalTransaction.recurrence_group_id 
@@ -255,12 +296,25 @@ export const useTransactions = () => {
         .gte('date', todayStr) // Apenas transações de hoje em diante
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao atualizar transações:', error);
+        throw error;
+      }
+      
+      console.log('Transações atualizadas:', data);
+
+      // Validação adicional: Verifica se o número de transações atualizadas é igual ao esperado
+      if (data && data.length !== transactionsToUpdate.length) {
+        console.warn('ATENÇÃO: Número de transações atualizadas difere do esperado', {
+          esperado: transactionsToUpdate.length,
+          atualizado: data.length
+        });
+      }
 
       // Atualiza o estado local apenas para transações futuras
       setTransactions(prev => prev.map(t => {
         if (t.recurrence_group_id === originalTransaction.recurrence_group_id && t.date >= todayStr) {
-          return { ...t, ...updates };
+          return { ...t, ...safeUpdates };
         }
         return t;
       }));
@@ -271,6 +325,7 @@ export const useTransactions = () => {
         description: `${updatedCount} transações futuras do grupo recorrente foram atualizadas.`,
       });
     } catch (error: any) {
+      console.error('Erro completo:', error);
       toast({
         title: "Erro ao atualizar transações recorrentes",
         description: error.message,

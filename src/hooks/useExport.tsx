@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,7 +27,7 @@ export const useExport = () => {
   const { toast } = useToast();
 
   /**
-   * Formata valor monetário para exibição
+   * Formata valor monetário
    */
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -40,6 +41,42 @@ export const useExport = () => {
    */
   const formatDate = (date: string) => {
     return format(new Date(date), 'dd/MM/yyyy', { locale: ptBR });
+  };
+
+  /**
+   * Captura gráficos como imagens para incluir no PDF
+   */
+  const captureCharts = async () => {
+    const charts: { canvas: HTMLCanvasElement; title: string }[] = [];
+    
+    try {
+      // Capturar gráfico de pizza de categorias
+      const categoryChart = document.querySelector('[data-chart="category-pie"]') as HTMLElement;
+      if (categoryChart) {
+        const canvas = await html2canvas(categoryChart, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          useCORS: true
+        });
+        charts.push({ canvas, title: 'Distribuição por Categorias' });
+      }
+
+      // Capturar gráfico de evolução mensal
+      const monthlyChart = document.querySelector('[data-chart="monthly-evolution"]') as HTMLElement;
+      if (monthlyChart) {
+        const canvas = await html2canvas(monthlyChart, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          useCORS: true
+        });
+        charts.push({ canvas, title: 'Evolução Mensal' });
+      }
+
+      return charts;
+    } catch (error) {
+      console.error('Erro ao capturar gráficos:', error);
+      return [];
+    }
   };
 
   /**
@@ -85,7 +122,7 @@ export const useExport = () => {
       ]);
       
       // Criar tabela de transações usando autoTable
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Status']],
         body: tableData,
         startY: 55,
@@ -123,20 +160,20 @@ export const useExport = () => {
       const balance = totalIncome - totalExpense;
       
       // Adicionar resumo financeiro
-      const finalY = (doc as any).lastAutoTable.finalY || 55;
+      let currentY = (doc as any).lastAutoTable?.finalY || 55;
       
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Resumo Financeiro', 20, finalY + 20);
+      doc.text('Resumo Financeiro', 20, currentY + 20);
       
       // Tabela de resumo usando autoTable
-      (doc as any).autoTable({
+      autoTable(doc, {
         body: [
           ['Total de Receitas', formatCurrency(totalIncome)],
           ['Total de Despesas', formatCurrency(totalExpense)],
           ['Saldo Final', formatCurrency(balance)]
         ],
-        startY: finalY + 30,
+        startY: currentY + 30,
         styles: {
           fontSize: 11,
           cellPadding: 4
@@ -147,6 +184,45 @@ export const useExport = () => {
         },
         theme: 'plain'
       });
+
+      // Incluir gráficos se solicitado
+      if (options.includeCharts) {
+        const charts = await captureCharts();
+        
+        if (charts.length > 0) {
+          currentY = (doc as any).lastAutoTable?.finalY || currentY + 60;
+          
+          // Adicionar título da seção de gráficos
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Gráficos', 20, currentY + 20);
+          
+          currentY += 30;
+          
+          for (const chart of charts) {
+            // Verificar se precisa de nova página
+            if (currentY + 100 > doc.internal.pageSize.height - 20) {
+              doc.addPage();
+              currentY = 20;
+            }
+            
+            // Adicionar título do gráfico
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(chart.title, 20, currentY);
+            
+            // Calcular dimensões da imagem
+            const imgWidth = 170; // Largura máxima
+            const imgHeight = (chart.canvas.height * imgWidth) / chart.canvas.width;
+            
+            // Adicionar imagem do gráfico
+            const imgData = chart.canvas.toDataURL('image/png');
+            doc.addImage(imgData, 'PNG', 20, currentY + 10, imgWidth, imgHeight);
+            
+            currentY += imgHeight + 30;
+          }
+        }
+      }
       
       // Salvar arquivo
       const fileName = `transacoes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.pdf`;

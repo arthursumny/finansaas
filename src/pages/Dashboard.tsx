@@ -15,9 +15,17 @@ import {
   ArrowLeft,
   BarChart3,
   Download,
-  Target
+  Target,
+  Menu
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,10 +34,12 @@ import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
 import { CategoryManager } from "@/components/CategoryManager";
 import { BudgetManager } from "@/components/BudgetManager";
+import { GoalManager } from "@/components/GoalManager";
 import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
 import CategoryPieChart from "@/components/charts/CategoryPieChart";
 import TransactionFiltersComponent from "@/components/filters/TransactionFilters";
 import { useTransactionFilters } from "@/hooks/useTransactionFilters";
+import { useGoals } from "@/hooks/useGoals";
 import { useTheme } from "@/contexts/ThemeContext";
 import ExportModal from "@/components/ExportModal";
 import RecurringUpdateModal from "@/components/RecurringUpdateModal";
@@ -44,6 +54,7 @@ const Dashboard = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showBudgetManager, setShowBudgetManager] = useState(false);
+  const [showGoalManager, setShowGoalManager] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [recurringUpdateModal, setRecurringUpdateModal] = useState<{
@@ -54,6 +65,7 @@ const Dashboard = () => {
 
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
+  const { goals, loading: goalsLoading } = useGoals();
   
   // Hook para filtros avançados
   const {
@@ -79,6 +91,13 @@ const Dashboard = () => {
 
   const handleEditTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     if (editingTransaction) {
+      console.log('Editando transação:', {
+        editingTransaction,
+        transactionData,
+        is_recurring: editingTransaction.is_recurring,
+        recurrence_group_id: editingTransaction.recurrence_group_id
+      });
+      
       // Se for uma transação recorrente e algum campo foi alterado, perguntar se quer atualizar todas
       if (editingTransaction.is_recurring && editingTransaction.recurrence_group_id) {
         const changedFields = [];
@@ -102,11 +121,14 @@ const Dashboard = () => {
            changedFields.push('o status');
          }
         
+        console.log('Campos alterados:', changedFields);
+        
         if (changedFields.length > 0) {
           const fieldName = changedFields.length === 1 
             ? changedFields[0] 
             : changedFields.slice(0, -1).join(', ') + ' e ' + changedFields[changedFields.length - 1];
           
+          console.log('Abrindo modal para confirmar atualização de todas as transações');
           setRecurringUpdateModal({
             isOpen: true,
             transactionData,
@@ -116,14 +138,35 @@ const Dashboard = () => {
         }
       }
       
-      await updateTransaction(editingTransaction.id, transactionData);
+      console.log('Atualizando apenas esta transação');
+      // Remove campos de recorrência para evitar duplicação
+      const { is_recurring, recurrence_type, recurrence_count, ...cleanData } = transactionData;
+      await updateTransaction(editingTransaction.id, cleanData);
       setEditingTransaction(null);
     }
   };
 
   const handleRecurringUpdateConfirm = async () => {
     if (editingTransaction && recurringUpdateModal.transactionData) {
-      await updateAllRecurringTransactions(editingTransaction, recurringUpdateModal.transactionData);
+      console.log('Confirmando atualização de todas as transações recorrentes');
+      const old = editingTransaction;
+      const newData = recurringUpdateModal.transactionData;
+      const updates = {};
+      const groupFields = ['type', 'description', 'amount', 'category', 'status'];
+      for (let field of groupFields) {
+        if (newData[field] !== old[field]) {
+          updates[field] = newData[field];
+        }
+      }
+      const dateChanged = newData.date !== old.date;
+      // Remove campos de recorrência se presentes
+      delete (updates as any).is_recurring;
+      delete (updates as any).recurrence_type;
+      delete (updates as any).recurrence_count;
+      await updateAllRecurringTransactions(editingTransaction, updates);
+      if (dateChanged) {
+        await updateTransaction(editingTransaction.id, { date: newData.date });
+      }
       setEditingTransaction(null);
       setRecurringUpdateModal({ isOpen: false });
     }
@@ -131,7 +174,11 @@ const Dashboard = () => {
 
   const handleRecurringUpdateCancel = async () => {
     if (editingTransaction && recurringUpdateModal.transactionData) {
-      await updateTransaction(editingTransaction.id, recurringUpdateModal.transactionData);
+      console.log('Cancelando atualização de todas - atualizando apenas esta transação');
+      // Remove campos de recorrência para evitar duplicação
+      const { is_recurring, recurrence_type, recurrence_count, ...cleanData } = recurringUpdateModal.transactionData;
+      console.log('Dados limpos para atualização individual:', cleanData);
+      await updateTransaction(editingTransaction.id, cleanData);
       setEditingTransaction(null);
       setRecurringUpdateModal({ isOpen: false });
     }
@@ -232,13 +279,14 @@ const Dashboard = () => {
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4">
-              {(showCategoryManager || showBudgetManager) && (
+              {(showCategoryManager || showBudgetManager || showGoalManager) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setShowCategoryManager(false);
                     setShowBudgetManager(false);
+                    setShowGoalManager(false);
                   }}
                   className="h-9"
                 >
@@ -274,6 +322,20 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </>
+              ) : showGoalManager ? (
+                <>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
+                    <Target className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                      Metas de Economia
+                    </h1>
+                    <p className="text-xs sm:text-sm text-secondary hidden sm:block">
+                      Gerenciar Metas de Economia
+                    </p>
+                  </div>
+                </>
               ) : (
                 <img 
                   src={actualTheme === 'dark' ? '/logo_branca.png' : '/logo_preta.png'} 
@@ -283,53 +345,111 @@ const Dashboard = () => {
               )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              {!showCategoryManager && !showBudgetManager && (
-                <Button
-                  variant={showCharts ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setShowCharts(!showCharts)}
-                  className={`h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 ${showCharts ? 'bg-primary text-white' : 'border-secondary/30 hover:bg-card hover:border-secondary'}`}
-                  title={showCharts ? "Ocultar gráficos" : "Mostrar gráficos"}
-                >
-                  <BarChart3 className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
-                </Button>
-              )}
-              {!showCategoryManager && !showBudgetManager && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowExportModal(true)}
-                  className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
-                  title="Exportar dados"
-                >
-                  <Download className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Exportar</span>
-                </Button>
-              )}
-              {!showCategoryManager && !showBudgetManager && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowBudgetManager(true)}
-                  className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
-                  title="Gerenciar orçamentos"
-                >
-                  <Target className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Orçamentos</span>
-                </Button>
-              )}
-              {!showCategoryManager && !showBudgetManager && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCategoryManager(true)}
-                  className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
-                >
-                  <Settings className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Categorias</span>
-                </Button>
-              )}
+              {/* Menu hambúrguer para dispositivos móveis */}
+              <div className="sm:hidden">
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 px-2 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                        title="Menu"
+                      >
+                        <Menu className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => setShowCharts(!showCharts)}>
+                        <BarChart3 className="w-4 h-4 mr-2" />
+                        {showCharts ? "Ocultar Gráficos" : "Mostrar Gráficos"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowExportModal(true)}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Exportar Dados
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setShowGoalManager(true)}>
+                        <Target className="w-4 h-4 mr-2" />
+                        Gerenciar Metas
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowBudgetManager(true)}>
+                        <Target className="w-4 h-4 mr-2" />
+                        Gerenciar Orçamentos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowCategoryManager(true)}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Gerenciar Categorias
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+
+              {/* Botões individuais para telas maiores */}
+              <div className="hidden sm:flex items-center gap-2">
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant={showCharts ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowCharts(!showCharts)}
+                    className={`h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 ${showCharts ? 'bg-primary text-white' : 'border-secondary/30 hover:bg-card hover:border-secondary'}`}
+                    title={showCharts ? "Ocultar gráficos" : "Mostrar gráficos"}
+                  >
+                    <BarChart3 className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowExportModal(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Exportar dados"
+                  >
+                    <Download className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Exportar</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowGoalManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Gerenciar metas"
+                  >
+                    <Target className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Metas</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBudgetManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Gerenciar orçamentos"
+                  >
+                    <Target className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Orçamentos</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCategoryManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                  >
+                    <Settings className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Categorias</span>
+                  </Button>
+                )}
+              </div>
+
+              {/* Botões sempre visíveis */}
               <div className="h-8 sm:h-9">
                 <ThemeToggle />
               </div>
@@ -434,6 +554,57 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Resumo das Metas */}
+        {!showCategoryManager && !showBudgetManager && !showGoalManager && goals && goals.filter(goal => goal.status === 'active').length > 0 && (
+          <Card className="border-0 shadow-sm bg-card">
+            <CardHeader className="pb-3 px-4 sm:px-6">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base sm:text-lg font-medium text-foreground flex items-center gap-2">
+                  <Target className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                  Metas de Economia
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowGoalManager(true)}
+                  className="text-xs sm:text-sm"
+                >
+                  Ver Todas
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6 pb-4">
+              <div className="grid gap-3 sm:gap-4">
+                {goals.filter(goal => goal.status === 'active').slice(0, 3).map((goal) => {
+                  const progress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0;
+                  const progressColor = progress >= 100 ? 'bg-green-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-yellow-500' : 'bg-gray-300';
+                  
+                  return (
+                    <div key={goal.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-sm sm:text-base text-foreground">{goal.title}</h4>
+                        <span className="text-xs sm:text-sm text-secondary">
+                          {Math.round(progress)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-300 ${progressColor}`}
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs sm:text-sm text-secondary">
+                        <span>{formatCurrency(goal.current_amount)}</span>
+                        <span>{formatCurrency(goal.target_amount)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Seção de Gráficos */}
         {showCharts && (
           <div className="space-y-4 sm:space-y-6">
@@ -526,6 +697,7 @@ const Dashboard = () => {
           initialData={editingTransaction}
           onSubmit={handleEditTransaction}
           onClose={() => setEditingTransaction(null)}
+          isEditing={true}
         />
       )}
 
@@ -550,6 +722,15 @@ const Dashboard = () => {
         <div className="fixed inset-0 bg-background z-50 overflow-auto">
           <div className="container mx-auto px-4 sm:px-6 py-6">
             <BudgetManager onBack={() => setShowBudgetManager(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Gerenciador de Metas */}
+      {showGoalManager && (
+        <div className="fixed inset-0 bg-background z-50 overflow-auto">
+          <div className="container mx-auto px-4 sm:px-6 py-6">
+            <GoalManager onBack={() => setShowGoalManager(false)} />
           </div>
         </div>
       )}

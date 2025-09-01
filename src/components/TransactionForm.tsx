@@ -97,7 +97,14 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     const amount = parseFloat(amountString.replace(',', '.')) || 0;
     
     if (formData.description && amount > 0 && formData.category) {
-      onSubmit({ ...formData, amount });
+      // Se estiver editando, remove os campos de recorrência para evitar duplicação
+      const submitData = { ...formData, amount };
+      if (isEditing) {
+        delete submitData.is_recurring;
+        delete submitData.recurrence_type;
+        delete submitData.recurrence_count;
+      }
+      onSubmit(submitData);
     }
   };
 
@@ -272,13 +279,13 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
             </div>
 
             {/* Recorrência */}
-            {!isEditing && (
-              <div className="space-y-4">
+            <div className="space-y-4">
                 <div className="flex items-center justify-between py-2">
                   <Label htmlFor="recurring" className="text-sm font-medium text-foreground">Transação recorrente</Label>
                   <Switch
                     id="recurring"
                     checked={formData.is_recurring}
+                    disabled={isEditing && formData.is_recurring}
                     onCheckedChange={(checked) => 
                       setFormData(prev => ({ ...prev, is_recurring: checked }))
                     }
@@ -292,6 +299,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                         <Label className="text-sm font-medium text-foreground">Tipo</Label>
                         <Select
                           value={formData.recurrence_type}
+                          disabled={isEditing && formData.is_recurring}
                           onValueChange={(value: "monthly" | "yearly") => 
                             setFormData(prev => ({ ...prev, recurrence_type: value }))
                           }
@@ -311,6 +319,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                           type="text"
                           value={formData.recurrence_count || ''}
                           className="h-11"
+                          disabled={isEditing && formData.is_recurring}
                           onChange={(e) => {
                             const value = e.target.value;
                             // Permite entrada vazia temporariamente
@@ -360,7 +369,6 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   </div>
                 )}
               </div>
-            )}
 
             {/* Botões */}
             <div className="flex gap-3 pt-6">
