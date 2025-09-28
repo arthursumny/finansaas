@@ -68,22 +68,29 @@
   - ✅ Alertas para orçamentos próximos ou acima do limite
   - ✅ Suporte a períodos mensais e anuais
 
-- [ ] **Metas de economia**
-  - Definir meta mensal/anual
-  - Acompanhar progresso
-  - Celebrar conquistas
-
-#### 🏦 Múltiplas Contas
-- [ ] **Gestão de múltiplas contas**
-  - Conta corrente, poupança, cartão
-  - Transferências entre contas
-  - Saldo consolidado
+- [x] **Metas de economia** ✅
+  - ✅ Definir meta mensal/anual
+  - ✅ Acompanhar progresso
+  - ✅ Celebrar conquistas
+  - ✅ Modelo de dados para metas (tabela goals)
+  - ✅ Hook useGoals para gerenciar metas
+  - ✅ Componentes GoalManager, GoalEditModal e GoalProgressCard
+  - ✅ Integração no Dashboard com visualização de progresso
+  - ✅ Funcionalidade de adicionar e remover valores
+  - ✅ Marcação automática de metas como concluídas
+  - ✅ Exibição condicional de metas ativas no Dashboard
 
 #### 📥 Import/Export
-- [ ] **Import de extratos bancários**
-  - Suporte a CSV
-  - Suporte a OFX
-  - Mapeamento automático de categorias
+- [x] **Import de extratos bancários** ✅ (Parcial - apenas CSV)
+  - ✅ Suporte a CSV
+  - [ ] Suporte a OFX
+  - ✅ Mapeamento automático de categorias
+  - ✅ Hook useImport para gerenciar importação
+  - ✅ Componentes ImportModal e FileUpload
+  - ✅ Parser CSV com detecção automática de separadores
+  - ✅ Preview de transações antes da importação
+  - ✅ Validação de arquivos e dados
+  - ✅ Integração no Dashboard com botão de importação
 
 #### 📱 Notificações
 - [ ] **Sistema de notificações**
@@ -115,12 +122,6 @@
   - Mês atual vs anterior
   - Ano atual vs anterior
   - Análise de crescimento
-
-#### 💳 Cartão de Crédito
-- [ ] **Controle de cartão de crédito**
-  - Gestão de faturas
-  - Controle de limite
-  - Parcelamentos
 
 #### 📈 Investimentos
 - [ ] **Gestão básica de investimentos**

@@ -338,12 +338,42 @@ export const useTransactions = () => {
     fetchTransactions();
   }, [user]);
 
+  /**
+   * Deleta múltiplas transações por IDs
+   */
+  const deleteMultipleTransactions = async (ids: string[]) => {
+    if (!user || ids.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      toast({
+        title: "Transações excluídas",
+        description: `${ids.length} transações foram removidas.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir transações",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return {
     transactions,
     loading,
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    deleteMultipleTransactions,
     deleteAllRecurringTransactions,
     updateAllRecurringTransactions,
     refetch: fetchTransactions,

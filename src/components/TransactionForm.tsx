@@ -90,11 +90,79 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     initialData?.amount ? String(initialData.amount).replace('.', ',') : ''
   );
 
+  /**
+   * Formata valor para exibição com separadores brasileiros
+   * Exemplo: 5000 -> "5.000", 5000.50 -> "5.000,50"
+   */
+  const formatAmountForDisplay = (value: string): string => {
+    if (!value) return '';
+    
+    // Remove caracteres não numéricos exceto vírgula e ponto
+    let cleanValue = value.replace(/[^0-9,.]/g, '');
+    
+    // Se não há vírgula, trata como número inteiro e adiciona separadores de milhares
+    if (!cleanValue.includes(',')) {
+      const numericValue = cleanValue.replace(/\./g, ''); // Remove pontos existentes
+      if (numericValue && !isNaN(Number(numericValue))) {
+        // Adiciona separadores de milhares
+        return numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      }
+    }
+    
+    // Se há vírgula, trata a parte antes como inteiros e depois como decimais
+    if (cleanValue.includes(',')) {
+      const [integerPart, decimalPart] = cleanValue.split(',');
+      const cleanInteger = integerPart.replace(/\./g, '');
+      
+      if (cleanInteger && !isNaN(Number(cleanInteger))) {
+        const formattedInteger = cleanInteger.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return decimalPart !== undefined ? `${formattedInteger},${decimalPart.slice(0, 2)}` : `${formattedInteger},`;
+      }
+    }
+    
+    return cleanValue;
+  };
+
+  /**
+   * Converte string de valor para número, tratando separadores brasileiros
+   * Exemplos: "5.000" -> 5000, "5.000,50" -> 5000.50, "5,50" -> 5.50
+   */
+  const parseAmountString = (amountStr: string): number => {
+    if (!amountStr) return 0;
+    
+    // Remove espaços
+    let cleanValue = amountStr.trim();
+    
+    // Se contém tanto ponto quanto vírgula, trata como separador de milhares + decimal
+    if (cleanValue.includes('.') && cleanValue.includes(',')) {
+      // Formato: 1.234.567,89 -> remove pontos e substitui vírgula por ponto
+      cleanValue = cleanValue.replace(/\./g, '').replace(',', '.');
+    }
+    // Se contém apenas vírgula, trata como separador decimal
+    else if (cleanValue.includes(',') && !cleanValue.includes('.')) {
+      // Formato: 1234,89 -> substitui vírgula por ponto
+      cleanValue = cleanValue.replace(',', '.');
+    }
+    // Se contém apenas ponto, verifica se é separador de milhares ou decimal
+    else if (cleanValue.includes('.') && !cleanValue.includes(',')) {
+      const parts = cleanValue.split('.');
+      // Se há mais de 2 partes ou a última parte tem mais de 2 dígitos, é separador de milhares
+      if (parts.length > 2 || (parts.length === 2 && parts[1].length > 2)) {
+        // Formato: 1.234.567 -> remove todos os pontos
+        cleanValue = cleanValue.replace(/\./g, '');
+      }
+      // Senão, trata como decimal (ex: 5.50)
+      // Mantém como está
+    }
+    
+    return parseFloat(cleanValue) || 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Converte o valor string para número antes de enviar
-    const amount = parseFloat(amountString.replace(',', '.')) || 0;
+    // Converte o valor string para número usando a nova lógica
+    const amount = parseAmountString(amountString);
     
     if (formData.description && amount > 0 && formData.category) {
       // Se estiver editando, remove os campos de recorrência para evitar duplicação
@@ -219,9 +287,11 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                 value={amountString}
                 className="h-11"
                 onChange={(e) => {
-                  // Permite digitar qualquer coisa, mas filtra caracteres não numéricos
-                  const value = e.target.value.replace(/[^0-9,.]/g, '');
-                  setAmountString(value);
+                  // Permite apenas números, vírgulas e pontos
+                  const rawValue = e.target.value.replace(/[^0-9,.]/g, '');
+                  // Formata o valor para exibição
+                  const formattedValue = formatAmountForDisplay(rawValue);
+                  setAmountString(formattedValue);
                 }}
                 required
               />

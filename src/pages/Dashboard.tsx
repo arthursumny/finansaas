@@ -16,7 +16,8 @@ import {
   BarChart3,
   Download,
   Target,
-  Menu
+  Menu,
+  Upload
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -43,6 +44,7 @@ import { useGoals } from "@/hooks/useGoals";
 import { useTheme } from "@/contexts/ThemeContext";
 import ExportModal from "@/components/ExportModal";
 import RecurringUpdateModal from "@/components/RecurringUpdateModal";
+import { ImportModal } from "@/components/ImportModal";
 
 const Dashboard = () => {
   const { theme } = useTheme();
@@ -57,6 +59,7 @@ const Dashboard = () => {
   const [showGoalManager, setShowGoalManager] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [recurringUpdateModal, setRecurringUpdateModal] = useState<{
     isOpen: boolean;
     transactionData?: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
@@ -64,7 +67,7 @@ const Dashboard = () => {
   }>({ isOpen: false });
 
   const { user, signOut } = useAuth();
-  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
   const { goals, loading: goalsLoading } = useGoals();
   
   // Hook para filtros avançados
@@ -404,6 +407,18 @@ const Dashboard = () => {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setShowImportModal(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Importar extrato"
+                  >
+                    <Upload className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Importar</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowExportModal(true)}
                     className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
                     title="Exportar dados"
@@ -677,6 +692,7 @@ const Dashboard = () => {
                 onUpdate={updateTransaction}
                 onEdit={handleOpenEdit}
                 onDeleteAllRecurring={deleteAllRecurringTransactions}
+                onDeleteMultiple={deleteMultipleTransactions}
               />
             )}
           </CardContent>
@@ -706,6 +722,12 @@ const Dashboard = () => {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         transactions={transactions}
+      />
+
+      {/* Modal de Importação */}
+      <ImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
       />
 
       {/* Gerenciador de Categorias */}

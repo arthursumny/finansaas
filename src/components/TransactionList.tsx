@@ -14,6 +14,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import DiscountModal from "./DiscountModal";
+import AbatementModal from "./AbatementModal";
 
 interface Transaction {
   id: string;
@@ -41,10 +42,16 @@ interface TransactionListProps {
   onUpdate: (id: string, updates: Partial<Transaction>) => void;
   onEdit: (transaction: Transaction) => void;
   onDeleteAllRecurring: (transaction: Transaction) => void;
+  onDeleteMultiple: (ids: string[]) => void;
 }
 
-const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring }: TransactionListProps) => {
+const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple }: TransactionListProps) => {
   const [discountModal, setDiscountModal] = useState<{
+    isOpen: boolean;
+    transaction: Transaction | null;
+  }>({ isOpen: false, transaction: null });
+
+  const [abatementModal, setAbatementModal] = useState<{
     isOpen: boolean;
     transaction: Transaction | null;
   }>({ isOpen: false, transaction: null });
@@ -85,6 +92,53 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
       });
     }
     setDiscountModal({ isOpen: false, transaction: null });
+  };
+
+  /**
+   * Confirma o abatimento de um empréstimo/despesa recorrente
+   * Exclui parcelas futuras e aplica desconto na parcela atual
+   */
+  const handleAbatementConfirm = async (totalAmount: number, paidAmount: number, abatementDate: string, futureTransactionIds: string[]) => {
+    if (abatementModal.transaction) {
+      const discountAmount = totalAmount - paidAmount;
+      const currentTransaction = abatementModal.transaction;
+      
+      try {
+        // 1. Primeiro, exclui todas as parcelas futuras (exceto a atual)
+        const futureIdsToDelete = futureTransactionIds.filter(id => id !== currentTransaction.id);
+        
+        if (futureIdsToDelete.length > 0) {
+          onDeleteMultiple(futureIdsToDelete);
+        }
+        
+        // 2. Atualiza a parcela atual com o desconto e nova data
+        onUpdate(currentTransaction.id, {
+          status: "paid",
+          original_amount: totalAmount,
+          discount_amount: discountAmount,
+          amount: paidAmount,
+          date: abatementDate,
+          // Remove campos de recorrência para que não gere mais parcelas
+          is_recurring: false,
+          recurrence_type: undefined,
+          recurrence_count: undefined,
+          // recurrence_group_id: undefined // campo não existe no tipo Transaction
+        });
+        
+        // 3. Fecha o modal
+        setAbatementModal({ isOpen: false, transaction: null });
+        
+      } catch (error) {
+        console.error('Erro ao processar abatimento:', error);
+      }
+    }
+  };
+
+  /**
+   * Abre o modal de abatimento para despesas recorrentes
+   */
+  const handleAbatement = (transaction: Transaction) => {
+    setAbatementModal({ isOpen: true, transaction });
   };
 
   const handleFullDiscount = (transaction: Transaction) => {
@@ -213,15 +267,17 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
               
               {transaction.is_recurring && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleFullDiscount(transaction)}
-                    className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium flex-1"
-                    title="Abater valor inteiro"
-                  >
-                    Abater
-                  </Button>
+                  {transaction.type === "expense" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAbatement(transaction)}
+                      className="h-7 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10 font-medium flex-1"
+                      title="Abater empréstimo"
+                    >
+                      Abater
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -335,15 +391,17 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 </Button>
                 {transaction.is_recurring && (
                   <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleFullDiscount(transaction)}
-                      className="h-9 text-xs px-3 text-primary hover:text-primary hover:bg-primary/10 font-medium"
-                      title="Abater valor inteiro"
-                    >
-                      Abater
-                    </Button>
+                    {transaction.type === "expense" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAbatement(transaction)}
+                        className="h-9 text-xs px-3 text-primary hover:text-primary hover:bg-primary/10 font-medium"
+                        title="Abater empréstimo"
+                      >
+                        Abater
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -367,6 +425,14 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
         onConfirm={handleDiscountConfirm}
         currentAmount={discountModal.transaction?.amount || 0}
         transactionDescription={discountModal.transaction?.description || ""}
+        isRecurring={discountModal.transaction?.is_recurring || false}
+      />
+      
+      <AbatementModal
+        isOpen={abatementModal.isOpen}
+        onClose={() => setAbatementModal({ isOpen: false, transaction: null })}
+        onConfirm={handleAbatementConfirm}
+        transaction={abatementModal.transaction}
       />
     </div>
   );

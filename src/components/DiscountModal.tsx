@@ -10,23 +10,38 @@ interface DiscountModalProps {
   onConfirm: (originalAmount: number, paidAmount: number) => void;
   currentAmount: number;
   transactionDescription: string;
+  isRecurring?: boolean;
 }
 
+/**
+ * Modal para aplicar desconto em transações
+ * Para transações recorrentes, mostra apenas o campo de valor pago
+ * Para transações normais, mostra ambos os campos (valor original e valor pago)
+ */
 const DiscountModal = ({ 
   isOpen, 
   onClose, 
   onConfirm, 
   currentAmount, 
-  transactionDescription 
+  transactionDescription,
+  isRecurring = false
 }: DiscountModalProps) => {
   const [originalAmount, setOriginalAmount] = useState(currentAmount);
   const [paidAmount, setPaidAmount] = useState(currentAmount);
 
+  /**
+   * Confirma o desconto aplicado
+   */
   const handleConfirm = () => {
-    onConfirm(originalAmount, paidAmount);
+    // Para transações recorrentes, o valor original é sempre o valor atual
+    const finalOriginalAmount = isRecurring ? currentAmount : originalAmount;
+    onConfirm(finalOriginalAmount, paidAmount);
     onClose();
   };
 
+  /**
+   * Confirma que não houve desconto (apenas para transações não recorrentes)
+   */
   const handleNoDiscount = () => {
     onConfirm(currentAmount, currentAmount);
     onClose();
@@ -36,24 +51,29 @@ const DiscountModal = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Teve desconto nesta transação?</DialogTitle>
+          <DialogTitle>
+            {isRecurring ? "Qual foi o valor pago?" : "Teve desconto nesta transação?"}
+          </DialogTitle>
           <DialogDescription>
-            {transactionDescription} - Valor atual: R$ {currentAmount.toFixed(2)}
+            {transactionDescription} - Valor original: R$ {currentAmount.toFixed(2)}
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="original">Valor original (R$)</Label>
-            <Input
-              id="original"
-              type="number"
-              step="0.01"
-              min="0"
-              value={originalAmount}
-              onChange={(e) => setOriginalAmount(parseFloat(e.target.value) || 0)}
-            />
-          </div>
+          {/* Para transações não recorrentes, mostra o campo de valor original */}
+          {!isRecurring && (
+            <div className="space-y-2">
+              <Label htmlFor="original">Valor original (R$)</Label>
+              <Input
+                id="original"
+                type="number"
+                step="0.01"
+                min="0"
+                value={originalAmount}
+                onChange={(e) => setOriginalAmount(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="paid">Valor pago com desconto (R$)</Label>
@@ -67,19 +87,23 @@ const DiscountModal = ({
             />
           </div>
           
-          {originalAmount > paidAmount && (
+          {/* Mostra o desconto calculado */}
+          {((isRecurring && currentAmount > paidAmount) || (!isRecurring && originalAmount > paidAmount)) && (
             <div className="text-sm text-muted-foreground">
-              Desconto: R$ {(originalAmount - paidAmount).toFixed(2)}
+              Desconto: R$ {(isRecurring ? currentAmount - paidAmount : originalAmount - paidAmount).toFixed(2)}
             </div>
           )}
         </div>
         
         <div className="flex gap-2 mt-6">
-          <Button variant="outline" onClick={handleNoDiscount} className="flex-1">
-            Não houve desconto
-          </Button>
-          <Button onClick={handleConfirm} className="flex-1">
-            Confirmar desconto
+          {/* Botão "Não houve desconto" apenas para transações não recorrentes */}
+          {!isRecurring && (
+            <Button variant="outline" onClick={handleNoDiscount} className="flex-1">
+              Não houve desconto
+            </Button>
+          )}
+          <Button onClick={handleConfirm} className={isRecurring ? "w-full" : "flex-1"}>
+            {isRecurring ? "Confirmar pagamento" : "Confirmar desconto"}
           </Button>
         </div>
       </DialogContent>
