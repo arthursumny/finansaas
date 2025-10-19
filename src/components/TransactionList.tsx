@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -9,7 +16,10 @@ import {
   Trash2,
   Check,
   Clock,
-  Edit
+  Edit,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,6 +46,16 @@ interface Transaction {
   updated_at: string;
 }
 
+type SortOption = 
+  | "date-desc"      // Data mais recente
+  | "date-asc"       // Data mais antiga
+  | "income-first"   // Entradas primeiro
+  | "expense-first"  // Saídas primeiro
+  | "paid-first"     // Pagos primeiro
+  | "pending-first"  // Pendentes primeiro
+  | "amount-desc"    // Maior valor
+  | "amount-asc";    // Menor valor
+
 interface TransactionListProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
@@ -46,6 +66,8 @@ interface TransactionListProps {
 }
 
 const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple }: TransactionListProps) => {
+  const [sortOption, setSortOption] = useState<SortOption>("date-desc");
+  
   const [discountModal, setDiscountModal] = useState<{
     isOpen: boolean;
     transaction: Transaction | null;
@@ -55,6 +77,56 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
     isOpen: boolean;
     transaction: Transaction | null;
   }>({ isOpen: false, transaction: null });
+
+  // Lógica de ordenação
+  const sortedTransactions = useMemo(() => {
+    const sorted = [...transactions];
+    
+    switch (sortOption) {
+      case "date-desc":
+        return sorted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      case "date-asc":
+        return sorted.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      case "income-first":
+        return sorted.sort((a, b) => {
+          if (a.type === "income" && b.type === "expense") return -1;
+          if (a.type === "expense" && b.type === "income") return 1;
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+      
+      case "expense-first":
+        return sorted.sort((a, b) => {
+          if (a.type === "expense" && b.type === "income") return -1;
+          if (a.type === "income" && b.type === "expense") return 1;
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+      
+      case "paid-first":
+        return sorted.sort((a, b) => {
+          if (a.status === "paid" && b.status === "pending") return -1;
+          if (a.status === "pending" && b.status === "paid") return 1;
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+      
+      case "pending-first":
+        return sorted.sort((a, b) => {
+          if (a.status === "pending" && b.status === "paid") return -1;
+          if (a.status === "paid" && b.status === "pending") return 1;
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+      
+      case "amount-desc":
+        return sorted.sort((a, b) => b.amount - a.amount);
+      
+      case "amount-asc":
+        return sorted.sort((a, b) => a.amount - b.amount);
+      
+      default:
+        return sorted;
+    }
+  }, [transactions, sortOption]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -162,7 +234,70 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      {transactions.map((transaction) => (
+      {/* Seletor de Ordenação */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Ordenar por:</span>
+        </div>
+        <Select value={sortOption} onValueChange={(value: SortOption) => setSortOption(value)}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date-desc">
+              <div className="flex items-center gap-2">
+                <ArrowDown className="w-3 h-3" />
+                Data mais recente
+              </div>
+            </SelectItem>
+            <SelectItem value="date-asc">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="w-3 h-3" />
+                Data mais antiga
+              </div>
+            </SelectItem>
+            <SelectItem value="income-first">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-3 h-3 text-green-600" />
+                Entradas primeiro
+              </div>
+            </SelectItem>
+            <SelectItem value="expense-first">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-3 h-3 text-red-600" />
+                Saídas primeiro
+              </div>
+            </SelectItem>
+            <SelectItem value="paid-first">
+              <div className="flex items-center gap-2">
+                <Check className="w-3 h-3 text-green-600" />
+                Pagos primeiro
+              </div>
+            </SelectItem>
+            <SelectItem value="pending-first">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3 h-3 text-orange-600" />
+                Pendentes primeiro
+              </div>
+            </SelectItem>
+            <SelectItem value="amount-desc">
+              <div className="flex items-center gap-2">
+                <ArrowDown className="w-3 h-3" />
+                Maior valor
+              </div>
+            </SelectItem>
+            <SelectItem value="amount-asc">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="w-3 h-3" />
+                Menor valor
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {sortedTransactions.map((transaction) => (
         <Card key={transaction.id} className="transition-all hover:shadow-lg border-0 shadow-sm">
           <CardContent className="p-3 sm:p-6">
             {/* Layout Mobile: Stack Vertical */}

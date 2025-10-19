@@ -17,7 +17,8 @@ import {
   Download,
   Target,
   Menu,
-  Upload
+  Upload,
+  Info
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -45,6 +46,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import ExportModal from "@/components/ExportModal";
 import RecurringUpdateModal from "@/components/RecurringUpdateModal";
 import { ImportModal } from "@/components/ImportModal";
+import BalanceDetailModal from "@/components/BalanceDetailModal";
 
 const Dashboard = () => {
   const { theme } = useTheme();
@@ -65,6 +67,10 @@ const Dashboard = () => {
     transactionData?: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
     fieldName?: string;
   }>({ isOpen: false });
+  const [balanceDetailModal, setBalanceDetailModal] = useState<{
+    isOpen: boolean;
+    type: 'monthly' | 'accumulated';
+  }>({ isOpen: false, type: 'monthly' });
 
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
@@ -209,7 +215,7 @@ const Dashboard = () => {
         return transactionDate >= monthStart && transactionDate <= monthEnd;
       });
 
-  // Calcular totais
+  // Calcular totais do mês (TODAS as transações do mês, pagas e pendentes)
   const monthlyIncome = currentMonthTransactions
     .filter(t => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -543,8 +549,19 @@ const Dashboard = () => {
               <CardTitle className="text-xs sm:text-sm font-medium text-secondary">
                 Balanço do Mês
               </CardTitle>
-              <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${monthlyBalance >= 0 ? 'bg-primary/10' : 'bg-destructive/10'}`}>
-                <DollarSign className={`h-3 w-3 sm:h-5 sm:w-5 ${monthlyBalance >= 0 ? 'text-primary' : 'text-destructive'}`} />
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBalanceDetailModal({ isOpen: true, type: 'monthly' })}
+                  className="h-6 w-6 p-0 hover:bg-muted/50"
+                  title="Ver detalhes do cálculo"
+                >
+                  <Info className="h-3 w-3" />
+                </Button>
+                <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${monthlyBalance >= 0 ? 'bg-primary/10' : 'bg-destructive/10'}`}>
+                  <DollarSign className={`h-3 w-3 sm:h-5 sm:w-5 ${monthlyBalance >= 0 ? 'text-primary' : 'text-destructive'}`} />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
@@ -557,8 +574,19 @@ const Dashboard = () => {
           <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Saldo Acumulado</CardTitle>
-              <div className="w-7 h-7 sm:w-10 sm:h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                <DollarSign className="h-3 w-3 sm:h-5 sm:w-5 text-primary" />
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBalanceDetailModal({ isOpen: true, type: 'accumulated' })}
+                  className="h-6 w-6 p-0 hover:bg-muted/50"
+                  title="Ver detalhes do cálculo"
+                >
+                  <Info className="h-3 w-3" />
+                </Button>
+                <div className="w-7 h-7 sm:w-10 sm:h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                  <DollarSign className="h-3 w-3 sm:h-5 sm:w-5 text-primary" />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
@@ -763,6 +791,19 @@ const Dashboard = () => {
         onConfirm={handleRecurringUpdateConfirm}
         onCancel={handleRecurringUpdateCancel}
         fieldName={recurringUpdateModal.fieldName || ''}
+      />
+
+      {/* Modal de Detalhamento do Balanço */}
+      <BalanceDetailModal
+        isOpen={balanceDetailModal.isOpen}
+        onClose={() => setBalanceDetailModal({ isOpen: false, type: 'monthly' })}
+        type={balanceDetailModal.type}
+        transactions={transactions}
+        currentDate={currentDate}
+        monthlyIncome={monthlyIncome}
+        monthlyExpenses={monthlyExpenses}
+        monthlyBalance={monthlyBalance}
+        accumulatedBalance={accumulatedBalance}
       />
     </div>
   );
