@@ -161,7 +161,7 @@ const Index = () => {
             </div>
             <div>
               <p className="text-sm text-slate-300">FinanSaaS</p>
-              <p className="text-lg font-semibold text-white">Controle financeiro claro e bonito</p>
+              <p className="text-lg font-semibold text-white">Controle suas finanças de forma simples e eficiente</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -181,14 +181,14 @@ const Index = () => {
             <div className="space-y-8">
               <div className="space-y-4">
                 <Badge className="bg-sky-500/20 text-sky-100 border border-sky-400/30">
-                  Visual imersivo (3D + parallax) sem perder o foco financeiro
+                  Você no controle sempre
                 </Badge>
                 <h1 className="text-4xl lg:text-5xl font-bold leading-tight text-white">
-                  Controle financeiro moderno, fluido e em português.
+                  Controle suas finanças de forma simples e eficiente.
                 </h1>
                 <p className="text-lg text-slate-300">
                   Dashboards em tempo real, metas e orçamentos, importação OFX/CSV e alertas inteligentes.
-                  Visual imersivo com parallax e modelos 3D para facilitar a leitura, sem perder performance.
+                  Seja você um iniciante ou um profissional, o FinanSaaS é a ferramenta perfeita para você.
                   Plano Free com 20 lançamentos/mês e Finan Pro por R$ 9,90/mês para ilimitado, metas e orçamentos avançados.
                 </p>
               </div>
@@ -274,8 +274,8 @@ const Index = () => {
             {[
               {
                 icon: Sparkles,
-                title: "Visual imersivo e claro",
-                desc: "Cenas 3D e parallax para destacar tendências de caixa e categorias de gasto.",
+                title: "Saiba onde está indo o seu dinheiro",
+                desc: "Com o FinanSaaS você pode visualizar seus gastos e receitas de forma clara e organizada.",
               },
               {
                 icon: Activity,
@@ -284,8 +284,8 @@ const Index = () => {
               },
               {
                 icon: Shield,
-                title: "Pronto para produção",
-                desc: "Segurança, autenticação Supabase e dados criptografados para operar com confiança.",
+                title: "Segurança e confiabilidade",
+                desc: "Segurança, autenticação e dados criptografados para operar com confiança.",
               },
             ].map((item) => (
               <div
