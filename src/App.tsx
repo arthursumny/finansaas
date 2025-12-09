@@ -7,6 +7,7 @@ import { AuthProvider } from "./hooks/useAuth";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
+import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
@@ -21,7 +22,8 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Login />} />
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
               <Route
                 path="/dashboard"
                 element={
