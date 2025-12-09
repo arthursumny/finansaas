@@ -561,6 +561,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
         currentAmount={discountModal.transaction?.amount || 0}
         transactionDescription={discountModal.transaction?.description || ""}
         isRecurring={discountModal.transaction?.is_recurring || false}
+        transactionType={discountModal.transaction?.type || "expense"}
       />
       
       <AbatementModal

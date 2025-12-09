@@ -11,6 +11,7 @@ interface DiscountModalProps {
   currentAmount: number;
   transactionDescription: string;
   isRecurring?: boolean;
+  transactionType: 'income' | 'expense';
 }
 
 /**
@@ -24,18 +25,31 @@ const DiscountModal = ({
   onConfirm, 
   currentAmount, 
   transactionDescription,
-  isRecurring = false
+  isRecurring = false,
+  transactionType
 }: DiscountModalProps) => {
-  const [originalAmount, setOriginalAmount] = useState(currentAmount);
-  const [paidAmount, setPaidAmount] = useState(currentAmount);
+  // Mantemos como string para permitir apagar o zero sem forçar 0
+  const [originalAmountInput, setOriginalAmountInput] = useState(currentAmount.toString());
+  const [paidAmountInput, setPaidAmountInput] = useState(currentAmount.toString());
+  const isIncome = transactionType === 'income';
+  const actionVerb = isIncome ? 'recebido' : 'pago';
+
+  // Sempre que abrir o modal ou o valor mudar, reseta os campos para o valor original
+  useEffect(() => {
+    setOriginalAmountInput(currentAmount.toString());
+    setPaidAmountInput(currentAmount.toString());
+  }, [isOpen, currentAmount]);
 
   /**
    * Confirma o desconto aplicado
    */
   const handleConfirm = () => {
+    const parsedOriginal = isRecurring ? currentAmount : parseFloat(originalAmountInput || '0');
+    const parsedPaid = parseFloat(paidAmountInput || '0');
+
     // Para transações recorrentes, o valor original é sempre o valor atual
-    const finalOriginalAmount = isRecurring ? currentAmount : originalAmount;
-    onConfirm(finalOriginalAmount, paidAmount);
+    const finalOriginalAmount = isRecurring ? currentAmount : parsedOriginal;
+    onConfirm(finalOriginalAmount, parsedPaid);
     onClose();
   };
 
@@ -52,7 +66,7 @@ const DiscountModal = ({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isRecurring ? "Qual foi o valor pago?" : "Teve desconto nesta transação?"}
+            {isIncome ? "Qual foi o valor recebido?" : isRecurring ? "Qual foi o valor pago?" : "Teve desconto nesta transação?"}
           </DialogTitle>
           <DialogDescription>
             {transactionDescription} - Valor original: R$ {currentAmount.toFixed(2)}
@@ -69,41 +83,47 @@ const DiscountModal = ({
                 type="number"
                 step="0.01"
                 min="0"
-                value={originalAmount}
-                onChange={(e) => setOriginalAmount(parseFloat(e.target.value) || 0)}
+                value={originalAmountInput}
+                onChange={(e) => setOriginalAmountInput(e.target.value)}
               />
             </div>
           )}
           
           <div className="space-y-2">
-            <Label htmlFor="paid">Valor pago com desconto (R$)</Label>
+            <Label htmlFor="paid">{isIncome ? "Valor recebido (R$)" : "Valor pago com desconto (R$)"}</Label>
             <Input
               id="paid"
               type="number"
               step="0.01"
               min="0"
-              value={paidAmount}
-              onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+              value={paidAmountInput}
+              onChange={(e) => setPaidAmountInput(e.target.value)}
             />
           </div>
           
           {/* Mostra o desconto calculado */}
-          {((isRecurring && currentAmount > paidAmount) || (!isRecurring && originalAmount > paidAmount)) && (
-            <div className="text-sm text-muted-foreground">
-              Desconto: R$ {(isRecurring ? currentAmount - paidAmount : originalAmount - paidAmount).toFixed(2)}
-            </div>
-          )}
+          {(() => {
+            const baseAmount = isRecurring ? currentAmount : parseFloat(originalAmountInput || '0');
+            const paidAmount = parseFloat(paidAmountInput || '0');
+            const difference = baseAmount - paidAmount;
+            if (!Number.isFinite(difference) || difference === 0) return null;
+            return (
+              <div className="text-sm text-muted-foreground">
+                {isIncome ? "Diferença" : "Desconto"}: R$ {difference.toFixed(2)}
+              </div>
+            );
+          })()}
         </div>
         
         <div className="flex gap-2 mt-6">
           {/* Botão "Não houve desconto" apenas para transações não recorrentes */}
           {!isRecurring && (
             <Button variant="outline" onClick={handleNoDiscount} className="flex-1">
-              Não houve desconto
+              {isIncome ? "Valor integral" : "Não houve desconto"}
             </Button>
           )}
           <Button onClick={handleConfirm} className={isRecurring ? "w-full" : "flex-1"}>
-            {isRecurring ? "Confirmar pagamento" : "Confirmar desconto"}
+            {isIncome ? "Confirmar recebimento" : (isRecurring ? "Confirmar pagamento" : "Confirmar desconto")}
           </Button>
         </div>
       </DialogContent>
