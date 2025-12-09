@@ -156,12 +156,12 @@ const Index = () => {
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-black/30 border-b border-white/5">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Sparkles className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-2xl bg-white shadow-lg shadow-blue-500/30 flex items-center justify-center p-1.5">
+              <img src="/icon_svg.svg" alt="FinanSaaS" className="h-8 w-8 object-contain" />
             </div>
             <div>
               <p className="text-sm text-slate-300">FinanSaaS</p>
-              <p className="text-lg font-semibold text-white">Cashflow em modo cinema</p>
+              <p className="text-lg font-semibold text-white">Controle financeiro claro e bonito</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -181,14 +181,15 @@ const Index = () => {
             <div className="space-y-8">
               <div className="space-y-4">
                 <Badge className="bg-sky-500/20 text-sky-100 border border-sky-400/30">
-                  Modelos 3D · Parallax · Slow camera
+                  Visual imersivo (3D + parallax) sem perder o foco financeiro
                 </Badge>
                 <h1 className="text-4xl lg:text-5xl font-bold leading-tight text-white">
-                  Controle financeiro com uma experiência imersiva e fluida em português.
+                  Controle financeiro moderno, fluido e em português.
                 </h1>
                 <p className="text-lg text-slate-300">
-                  Interface cinematográfica com rolagem parallax, modelos 3D e efeitos de câmera lenta.
-                  Plano Free para começar agora e upgrade premium de R$ 9,90/mês para lançamentos ilimitados, metas e orçamentos.
+                  Dashboards em tempo real, metas e orçamentos, importação OFX/CSV e alertas inteligentes.
+                  Visual imersivo com parallax e modelos 3D para facilitar a leitura, sem perder performance.
+                  Plano Free com 20 lançamentos/mês e Finan Pro por R$ 9,90/mês para ilimitado, metas e orçamentos avançados.
                 </p>
               </div>
 
@@ -209,9 +210,9 @@ const Index = () => {
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {[
-                  { icon: Gauge, label: "Experiência cinematográfica" },
-                  { icon: Activity, label: "Parallax + câmera lenta" },
-                  { icon: Shield, label: "Segurança de ponta" },
+                  { icon: Gauge, label: "Dashboard em tempo real" },
+                  { icon: Activity, label: "Metas, orçamentos e alertas" },
+                  { icon: Shield, label: "Segurança e criptografia" },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -273,18 +274,18 @@ const Index = () => {
             {[
               {
                 icon: Sparkles,
-                title: "Modelos 3D e parallax",
-                desc: "Cenas 3D em tempo real com interação de rolagem e câmera lenta suave.",
+                title: "Visual imersivo e claro",
+                desc: "Cenas 3D e parallax para destacar tendências de caixa e categorias de gasto.",
               },
               {
                 icon: Activity,
-                title: "Interface fluida",
-                desc: "Micro interações, glassmorphism e alta taxa de quadros para navegação sem atrito.",
+                title: "Produtividade financeira",
+                desc: "Metas, orçamentos, importação OFX/CSV e categorização rápida para agilizar lançamentos.",
               },
               {
                 icon: Shield,
                 title: "Pronto para produção",
-                desc: "Segurança, autenticação e dados criptografados para você lançar sem medo.",
+                desc: "Segurança, autenticação Supabase e dados criptografados para operar com confiança.",
               },
             ].map((item) => (
               <div
