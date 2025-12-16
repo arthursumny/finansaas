@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Filter, X, Search } from 'lucide-react';
+import { Calendar, Filter, X, Search, Tag as TagIcon } from 'lucide-react';
 import { useCategories } from '@/hooks/useCategories';
+import { useTags } from '@/hooks/useTags';
 import { Transaction } from '@/hooks/useTransactions';
 import SmartSearch from './SmartSearch';
 
@@ -19,6 +20,7 @@ export interface TransactionFilters {
   type?: 'income' | 'expense';
   status?: 'paid' | 'pending';
   searchTerm?: string;
+  tagIds?: string[]; // IDs das tags para filtrar
 }
 
 interface TransactionFiltersProps {
@@ -45,6 +47,7 @@ const TransactionFiltersComponent = ({
   transactions
 }: TransactionFiltersProps) => {
   const { categories } = useCategories();
+  const { tags } = useTags();
   const [localFilters, setLocalFilters] = useState<TransactionFilters>(filters);
 
   // Sincronizar filtros locais com os filtros externos
@@ -67,6 +70,23 @@ const TransactionFiltersComponent = ({
   const removeFilter = (key: keyof TransactionFilters) => {
     const newFilters = { ...localFilters };
     delete newFilters[key];
+    setLocalFilters(newFilters);
+    onFiltersChange(newFilters);
+  };
+
+  /**
+   * Toggle de uma tag no filtro
+   */
+  const toggleTagFilter = (tagId: string) => {
+    const currentTagIds = localFilters.tagIds || [];
+    const newTagIds = currentTagIds.includes(tagId)
+      ? currentTagIds.filter(id => id !== tagId)
+      : [...currentTagIds, tagId];
+    
+    const newFilters = { 
+      ...localFilters, 
+      tagIds: newTagIds.length > 0 ? newTagIds : undefined 
+    };
     setLocalFilters(newFilters);
     onFiltersChange(newFilters);
   };
@@ -258,6 +278,48 @@ const TransactionFiltersComponent = ({
               </div>
             </div>
 
+            {/* Filtro por Tags */}
+            {tags.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <TagIcon className="w-4 h-4" />
+                  Tags
+                </Label>
+                <div className="flex flex-wrap gap-2 p-3 border rounded-md bg-muted/30 min-h-[3rem]">
+                  {tags.length === 0 ? (
+                    <span className="text-sm text-muted-foreground">Nenhuma tag disponível</span>
+                  ) : (
+                    tags.map((tag) => {
+                      const isSelected = localFilters.tagIds?.includes(tag.id) || false;
+                      return (
+                        <Badge
+                          key={tag.id}
+                          variant={isSelected ? "default" : "outline"}
+                          className="cursor-pointer transition-all hover:opacity-80"
+                          style={isSelected ? {
+                            backgroundColor: tag.color,
+                            borderColor: tag.color,
+                            color: 'white'
+                          } : {
+                            borderColor: tag.color + '60',
+                            color: tag.color
+                          }}
+                          onClick={() => toggleTagFilter(tag.id)}
+                        >
+                          {tag.name}
+                        </Badge>
+                      );
+                    })
+                  )}
+                </div>
+                {localFilters.tagIds && localFilters.tagIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {localFilters.tagIds.length} tag{localFilters.tagIds.length > 1 ? 's' : ''} selecionada{localFilters.tagIds.length > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Filtros ativos */}
             {activeFiltersCount > 0 && (
               <div className="space-y-2">
@@ -334,6 +396,32 @@ const TransactionFiltersComponent = ({
                         onClick={() => removeFilter('maxAmount')}
                       />
                     </Badge>
+                  )}
+                  {localFilters.tagIds && localFilters.tagIds.length > 0 && (
+                    <>
+                      {localFilters.tagIds.map(tagId => {
+                        const tag = tags.find(t => t.id === tagId);
+                        if (!tag) return null;
+                        return (
+                          <Badge
+                            key={tagId}
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                            style={{
+                              backgroundColor: tag.color + '20',
+                              borderColor: tag.color + '40',
+                              color: tag.color
+                            }}
+                          >
+                            Tag: {tag.name}
+                            <X 
+                              className="w-3 h-3 cursor-pointer" 
+                              onClick={() => toggleTagFilter(tagId)}
+                            />
+                          </Badge>
+                        );
+                      })}
+                    </>
                   )}
                 </div>
               </div>

@@ -72,6 +72,16 @@ export const useTransactionFilters = (transactions: Transaction[]) => {
         }
       }
 
+      // Filtro por tags
+      if (filters.tagIds && filters.tagIds.length > 0) {
+        const transactionTagIds = transaction.tags?.map(tag => tag.id) || [];
+        // Verifica se pelo menos uma das tags selecionadas está presente na transação
+        const hasMatchingTag = filters.tagIds.some(tagId => transactionTagIds.includes(tagId));
+        if (!hasMatchingTag) {
+          return false;
+        }
+      }
+
       return true;
     });
   }, [transactions, filters]);
@@ -101,18 +111,30 @@ export const useTransactionFilters = (transactions: Transaction[]) => {
    * Verifica se há filtros ativos
    */
   const hasActiveFilters = useMemo(() => {
-    return Object.values(filters).some(value => 
-      value !== undefined && value !== '' && value !== null
-    );
+    return Object.entries(filters).some(([key, value]) => {
+      if (key === 'tagIds') {
+        return Array.isArray(value) && value.length > 0;
+      }
+      return value !== undefined && value !== '' && value !== null;
+    });
   }, [filters]);
 
   /**
    * Conta o número de filtros ativos
    */
   const activeFiltersCount = useMemo(() => {
-    return Object.values(filters).filter(value => 
-      value !== undefined && value !== '' && value !== null
-    ).length;
+    let count = 0;
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key === 'tagIds') {
+        // Para tags, conta cada tag selecionada
+        if (Array.isArray(value) && value.length > 0) {
+          count += value.length;
+        }
+      } else if (value !== undefined && value !== '' && value !== null) {
+        count += 1;
+      }
+    });
+    return count;
   }, [filters]);
 
   /**
