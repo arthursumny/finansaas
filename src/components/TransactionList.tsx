@@ -59,7 +59,8 @@ type SortOption =
   | "amount-desc"    // Maior valor
   | "amount-asc"     // Menor valor
   | "name-asc"       // A-Z
-  | "name-desc";     // Z-A
+  | "name-desc"      // Z-A
+  | "group-by-tags"; // Agrupar por tags
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -74,7 +75,7 @@ interface TransactionListProps {
 
 const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple, onTagFilter, selectedTagId }: TransactionListProps) => {
   const [sortOption, setSortOption] = useState<SortOption>("date-desc");
-  const { tags } = useTags();
+  const { tags, loading: tagsLoading } = useTags();
   
   const [discountModal, setDiscountModal] = useState<{
     isOpen: boolean;
@@ -143,6 +144,41 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
           const nameA = a.description.toLowerCase().trim();
           const nameB = b.description.toLowerCase().trim();
           return nameB.localeCompare(nameA, "pt-BR");
+        });
+      
+      case "group-by-tags":
+        // Agrupa transações por tags, mantendo ordenação por data dentro de cada grupo
+        return sorted.sort((a, b) => {
+          const aTags = a.tags || [];
+          const bTags = b.tags || [];
+          
+          // Transações sem tags vão para o final
+          if (aTags.length === 0 && bTags.length === 0) {
+            return new Date(b.date).getTime() - new Date(a.date).getTime();
+          }
+          if (aTags.length === 0) return 1;
+          if (bTags.length === 0) return -1;
+          
+          // Ordena tags por nome para agrupamento consistente
+          const aTagNames = aTags.map(t => t.name).sort().join(',');
+          const bTagNames = bTags.map(t => t.name).sort().join(',');
+          
+          // Se têm as mesmas tags, ordena por data
+          if (aTagNames === bTagNames) {
+            return new Date(b.date).getTime() - new Date(a.date).getTime();
+          }
+          
+          // Agrupa por primeira tag (alfabeticamente)
+          const aFirstTag = aTags.map(t => t.name).sort()[0];
+          const bFirstTag = bTags.map(t => t.name).sort()[0];
+          const tagCompare = aFirstTag.localeCompare(bFirstTag, "pt-BR");
+          
+          if (tagCompare !== 0) {
+            return tagCompare;
+          }
+          
+          // Se primeira tag é igual, ordena por data
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
         });
       
       default:
@@ -262,9 +298,9 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
           <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Ordenar por:</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <Select value={sortOption} onValueChange={(value: SortOption) => setSortOption(value)}>
-            <SelectTrigger className="w-[200px] flex-shrink-0">
+            <SelectTrigger className="w-full sm:w-[200px] flex-shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -328,42 +364,51 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 Z-A
               </div>
             </SelectItem>
+            <SelectItem value="group-by-tags">
+              <div className="flex items-center gap-2">
+                <TagIcon className="w-3 h-3" />
+                Agrupar por tags
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
         
         {/* Filtro rápido por Tag - Sempre visível quando há tags e callback */}
-        {tags.length > 0 && onTagFilter ? (
+        {onTagFilter && !tagsLoading && (
           <Select 
             value={selectedTagId || "all"} 
             onValueChange={(value) => onTagFilter(value === "all" ? null : value)}
+            disabled={tags.length === 0}
           >
-            <SelectTrigger className="w-[180px] sm:w-[200px] flex-shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
+            <SelectTrigger className="w-full sm:w-[200px] flex-shrink-0">
+              <div className="flex items-center gap-2 min-w-0 w-full">
                 <TagIcon className="w-4 h-4 flex-shrink-0" />
-                <SelectValue placeholder="Filtrar por tag" />
+                <SelectValue placeholder={tags.length === 0 ? "Nenhuma tag" : "Filtrar por tag"} />
               </div>
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                <div className="flex items-center gap-2">
-                  <TagIcon className="w-3 h-3" />
-                  Todas as tags
-                </div>
-              </SelectItem>
-              {tags.map((tag) => (
-                <SelectItem key={tag.id} value={tag.id}>
+            {tags.length > 0 && (
+              <SelectContent>
+                <SelectItem value="all">
                   <div className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span className="truncate">{tag.name}</span>
+                    <TagIcon className="w-3 h-3" />
+                    Todas as tags
                   </div>
                 </SelectItem>
-              ))}
-            </SelectContent>
+                {tags.map((tag) => (
+                  <SelectItem key={tag.id} value={tag.id}>
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="truncate">{tag.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            )}
           </Select>
-        ) : null}
+        )}
         </div>
       </div>
 
