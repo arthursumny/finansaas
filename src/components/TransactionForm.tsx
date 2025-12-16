@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, Calendar as CalendarIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { X, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
@@ -13,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { Transaction } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
+import { useTags } from "@/hooks/useTags";
 
 interface TransactionFormData {
   type: "income" | "expense";
@@ -26,6 +28,7 @@ interface TransactionFormData {
   recurrence_count?: number;
   original_amount?: number;
   discount_amount?: number;
+  tag_ids?: string[];
 }
 
 interface TransactionFormProps {
@@ -37,6 +40,13 @@ interface TransactionFormProps {
 
 const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
   const { getCategoryNamesByType, loading: categoriesLoading } = useCategories();
+  const { tags, loading: tagsLoading, addTag } = useTags();
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
+    return initialData?.tags?.map(tag => tag.id) || [];
+  });
+  const [newTagName, setNewTagName] = useState("");
+  const [showNewTagInput, setShowNewTagInput] = useState(false);
+  
   const [formData, setFormData] = useState<TransactionFormData>(() => {
     if (initialData) {
       return {
@@ -50,7 +60,8 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
         recurrence_type: initialData.recurrence_type || "monthly",
         recurrence_count: initialData.recurrence_count || 1,
         original_amount: initialData.original_amount || initialData.amount,
-        discount_amount: initialData.discount_amount || 0
+        discount_amount: initialData.discount_amount || 0,
+        tag_ids: initialData.tags?.map(tag => tag.id) || []
       };
     }
     // Criar data atual com formatação manual para evitar problemas de timezone
@@ -71,7 +82,8 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
       recurrence_type: "monthly",
       recurrence_count: 1,
       original_amount: 0,
-      discount_amount: 0
+      discount_amount: 0,
+      tag_ids: []
     };
   });
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -166,13 +178,36 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     
     if (formData.description && amount > 0 && formData.category) {
       // Se estiver editando, remove os campos de recorrência para evitar duplicação
-      const submitData = { ...formData, amount };
+      const submitData = { ...formData, amount, tag_ids: selectedTagIds };
       if (isEditing) {
         delete submitData.is_recurring;
         delete submitData.recurrence_type;
         delete submitData.recurrence_count;
       }
       onSubmit(submitData);
+    }
+  };
+
+  const handleToggleTag = (tagId: string) => {
+    setSelectedTagIds(prev => 
+      prev.includes(tagId) 
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return;
+    
+    try {
+      const newTag = await addTag({ name: newTagName.trim() });
+      if (newTag) {
+        setSelectedTagIds(prev => [...prev, newTag.id]);
+        setNewTagName("");
+        setShowNewTagInput(false);
+      }
+    } catch (error) {
+      // Erro já tratado no hook
     }
   };
 
@@ -275,6 +310,100 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   )}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-foreground">Tags</Label>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 min-h-[2.5rem] p-2 border rounded-md bg-background">
+                  {selectedTagIds.map(tagId => {
+                    const tag = tags.find(t => t.id === tagId);
+                    if (!tag) return null;
+                    return (
+                      <Badge
+                        key={tagId}
+                        variant="secondary"
+                        className="cursor-pointer hover:opacity-80"
+                        style={{ backgroundColor: tag.color + '20', borderColor: tag.color + '40', color: tag.color }}
+                        onClick={() => handleToggleTag(tagId)}
+                      >
+                        {tag.name}
+                        <X className="w-3 h-3 ml-1" />
+                      </Badge>
+                    );
+                  })}
+                  {tagsLoading && (
+                    <span className="text-sm text-muted-foreground">Carregando tags...</span>
+                  )}
+                </div>
+                
+                {!showNewTagInput ? (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.filter(tag => !selectedTagIds.includes(tag.id)).map(tag => (
+                      <Badge
+                        key={tag.id}
+                        variant="outline"
+                        className="cursor-pointer hover:bg-accent"
+                        style={{ borderColor: tag.color + '60' }}
+                        onClick={() => handleToggleTag(tag.id)}
+                      >
+                        {tag.name}
+                      </Badge>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowNewTagInput(true)}
+                      className="h-7 text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Nova tag
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nome da tag"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCreateTag();
+                        } else if (e.key === 'Escape') {
+                          setShowNewTagInput(false);
+                          setNewTagName("");
+                        }
+                      }}
+                      className="h-8"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCreateTag}
+                      className="h-8"
+                    >
+                      Criar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowNewTagInput(false);
+                        setNewTagName("");
+                      }}
+                      className="h-8"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Valor */}

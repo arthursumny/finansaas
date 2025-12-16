@@ -24,6 +24,7 @@ export interface Transaction {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags?: Array<{ id: string; name: string; color: string }>; // Tags associadas
 }
 
 export const useTransactions = () => {
@@ -38,12 +39,28 @@ export const useTransactions = () => {
     try {
       const { data, error } = await supabase
         .from('transactions')
-        .select('*')
+        .select(`
+          *,
+          transaction_tags (
+            tag:tags (
+              id,
+              name,
+              color
+            )
+          )
+        `)
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
       if (error) throw error;
-      setTransactions((data || []) as Transaction[]);
+      
+      // Transformar os dados para incluir tags no formato esperado
+      const transactionsWithTags = (data || []).map((transaction: any) => ({
+        ...transaction,
+        tags: transaction.transaction_tags?.map((tt: any) => tt.tag) || []
+      }));
+      
+      setTransactions(transactionsWithTags as Transaction[]);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar transações",
@@ -112,12 +129,15 @@ export const useTransactions = () => {
     return transactions;
   };
 
-  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'tags'> & { tag_ids?: string[] }) => {
     if (!user) return;
 
     try {
+      // Extrair tag_ids do objeto transaction
+      const { tag_ids, ...transactionData } = transaction;
+      
       // Gerar todas as transações (recorrentes ou única)
-      const transactionsToInsert = generateRecurringTransactions(transaction);
+      const transactionsToInsert = generateRecurringTransactions(transactionData);
       
       const { data, error } = await supabase
         .from('transactions')
@@ -129,7 +149,33 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      setTransactions(prev => [...(data as Transaction[]), ...prev]);
+      // Associar tags às transações criadas
+      if (tag_ids && tag_ids.length > 0 && data) {
+        const tagRelations = [];
+        for (const transactionData of data) {
+          for (const tagId of tag_ids) {
+            tagRelations.push({
+              transaction_id: transactionData.id,
+              tag_id: tagId
+            });
+          }
+        }
+        
+        if (tagRelations.length > 0) {
+          const { error: tagError } = await supabase
+            .from('transaction_tags')
+            .insert(tagRelations);
+          
+          if (tagError) {
+            console.error('Erro ao associar tags:', tagError);
+            // Não falha a criação da transação se houver erro nas tags
+          }
+        }
+      }
+      
+      // Buscar transações novamente para incluir tags
+      await fetchTransactions();
+      
       toast({
         title: "Transação adicionada",
         description: transaction.is_recurring 
@@ -145,13 +191,16 @@ export const useTransactions = () => {
     }
   };
 
-  const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
+  const updateTransaction = async (id: string, updates: Partial<Transaction> & { tag_ids?: string[] }) => {
     if (!user) return;
 
     try {
+      // Extrair tag_ids do objeto updates
+      const { tag_ids, ...transactionUpdates } = updates;
+      
       const { data, error } = await supabase
         .from('transactions')
-        .update(updates)
+        .update(transactionUpdates)
         .eq('id', id)
         .eq('user_id', user.id)
         .select()
@@ -159,7 +208,30 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      setTransactions(prev => prev.map(t => t.id === id ? data as Transaction : t));
+      // Atualizar tags se fornecido
+      if (tag_ids !== undefined) {
+        // Remover todas as tags existentes
+        await supabase
+          .from('transaction_tags')
+          .delete()
+          .eq('transaction_id', id);
+        
+        // Adicionar novas tags
+        if (tag_ids.length > 0) {
+          const tagRelations = tag_ids.map(tagId => ({
+            transaction_id: id,
+            tag_id: tagId
+          }));
+          
+          await supabase
+            .from('transaction_tags')
+            .insert(tagRelations);
+        }
+      }
+      
+      // Buscar transações novamente para incluir tags atualizadas
+      await fetchTransactions();
+      
       toast({
         title: "Transação atualizada",
         description: "Transação atualizada com sucesso!",

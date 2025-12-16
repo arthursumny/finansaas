@@ -54,7 +54,9 @@ type SortOption =
   | "paid-first"     // Pagos primeiro
   | "pending-first"  // Pendentes primeiro
   | "amount-desc"    // Maior valor
-  | "amount-asc";    // Menor valor
+  | "amount-asc"     // Menor valor
+  | "name-asc"       // A-Z
+  | "name-desc";     // Z-A
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -122,6 +124,20 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
       
       case "amount-asc":
         return sorted.sort((a, b) => a.amount - b.amount);
+      
+      case "name-asc":
+        return sorted.sort((a, b) => {
+          const nameA = a.description.toLowerCase().trim();
+          const nameB = b.description.toLowerCase().trim();
+          return nameA.localeCompare(nameB, "pt-BR");
+        });
+      
+      case "name-desc":
+        return sorted.sort((a, b) => {
+          const nameA = a.description.toLowerCase().trim();
+          const nameB = b.description.toLowerCase().trim();
+          return nameB.localeCompare(nameA, "pt-BR");
+        });
       
       default:
         return sorted;
@@ -293,6 +309,18 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 Menor valor
               </div>
             </SelectItem>
+            <SelectItem value="name-asc">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="w-3 h-3" />
+                A-Z
+              </div>
+            </SelectItem>
+            <SelectItem value="name-desc">
+              <div className="flex items-center gap-2">
+                <ArrowDown className="w-3 h-3" />
+                Z-A
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -316,7 +344,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-foreground text-sm truncate">{transaction.description}</h4>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <Badge 
                       variant="secondary" 
                       className="text-xs font-medium bg-card text-secondary border-0"
@@ -327,6 +355,24 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                       <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Rec.
                       </Badge>
+                    )}
+                    {transaction.tags && transaction.tags.length > 0 && (
+                      <>
+                        {transaction.tags.map(tag => (
+                          <Badge
+                            key={tag.id}
+                            variant="outline"
+                            className="text-xs font-medium"
+                            style={{ 
+                              backgroundColor: tag.color + '15', 
+                              borderColor: tag.color + '40', 
+                              color: tag.color 
+                            }}
+                          >
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </>
                     )}
                   </div>
                 </div>
@@ -442,7 +488,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 </div>
 
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
                     <h4 className="font-semibold text-foreground text-base">{transaction.description}</h4>
                     <Badge 
                       variant="secondary" 
@@ -454,6 +500,24 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                       <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Recorrente
                       </Badge>
+                    )}
+                    {transaction.tags && transaction.tags.length > 0 && (
+                      <>
+                        {transaction.tags.map(tag => (
+                          <Badge
+                            key={tag.id}
+                            variant="outline"
+                            className="text-xs font-medium"
+                            style={{ 
+                              backgroundColor: tag.color + '15', 
+                              borderColor: tag.color + '40', 
+                              color: tag.color 
+                            }}
+                          >
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </>
                     )}
                   </div>
                   <div className="flex items-center gap-4 text-sm">
