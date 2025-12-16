@@ -14,7 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { Transaction } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
-import { useTags } from "@/hooks/useTags";
+import { useTags, TagFormData } from "@/hooks/useTags";
+import { TagEditModal } from "./TagEditModal";
 
 interface TransactionFormData {
   type: "income" | "expense";
@@ -44,8 +45,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
     return initialData?.tags?.map(tag => tag.id) || [];
   });
-  const [newTagName, setNewTagName] = useState("");
-  const [showNewTagInput, setShowNewTagInput] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
   
   const [formData, setFormData] = useState<TransactionFormData>(() => {
     if (initialData) {
@@ -196,15 +196,12 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     );
   };
 
-  const handleCreateTag = async () => {
-    if (!newTagName.trim()) return;
-    
+  const handleCreateTag = async (tagData: TagFormData) => {
     try {
-      const newTag = await addTag({ name: newTagName.trim() });
+      const newTag = await addTag(tagData);
       if (newTag) {
         setSelectedTagIds(prev => [...prev, newTag.id]);
-        setNewTagName("");
-        setShowNewTagInput(false);
+        setShowTagModal(false);
       }
     } catch (error) {
       // Erro já tratado no hook
@@ -338,71 +335,29 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   )}
                 </div>
                 
-                {!showNewTagInput ? (
-                  <div className="flex flex-wrap gap-2">
-                    {tags.filter(tag => !selectedTagIds.includes(tag.id)).map(tag => (
-                      <Badge
-                        key={tag.id}
-                        variant="outline"
-                        className="cursor-pointer hover:bg-accent"
-                        style={{ borderColor: tag.color + '60' }}
-                        onClick={() => handleToggleTag(tag.id)}
-                      >
-                        {tag.name}
-                      </Badge>
-                    ))}
-                    <Button
-                      type="button"
+                <div className="flex flex-wrap gap-2">
+                  {tags.filter(tag => !selectedTagIds.includes(tag.id)).map(tag => (
+                    <Badge
+                      key={tag.id}
                       variant="outline"
-                      size="sm"
-                      onClick={() => setShowNewTagInput(true)}
-                      className="h-7 text-xs"
+                      className="cursor-pointer hover:bg-accent"
+                      style={{ borderColor: tag.color + '60' }}
+                      onClick={() => handleToggleTag(tag.id)}
                     >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Nova tag
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Nome da tag"
-                      value={newTagName}
-                      onChange={(e) => setNewTagName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleCreateTag();
-                        } else if (e.key === 'Escape') {
-                          setShowNewTagInput(false);
-                          setNewTagName("");
-                        }
-                      }}
-                      className="h-8"
-                      autoFocus
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCreateTag}
-                      className="h-8"
-                    >
-                      Criar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setShowNewTagInput(false);
-                        setNewTagName("");
-                      }}
-                      className="h-8"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                )}
+                      {tag.name}
+                    </Badge>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTagModal(true)}
+                    className="h-7 text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Nova tag
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -590,6 +545,15 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
           </form>
         </CardContent>
       </Card>
+
+      {/* Modal de Criação de Tag */}
+      <TagEditModal
+        isOpen={showTagModal}
+        onClose={() => setShowTagModal(false)}
+        onSubmit={handleCreateTag}
+        tag={null}
+        isEditing={false}
+      />
     </div>
   );
 };
