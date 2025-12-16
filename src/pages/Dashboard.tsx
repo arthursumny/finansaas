@@ -743,6 +743,16 @@ const Dashboard = () => {
                 onEdit={handleOpenEdit}
                 onDeleteAllRecurring={deleteAllRecurringTransactions}
                 onDeleteMultiple={deleteMultipleTransactions}
+                onTagFilter={(tagId) => {
+                  if (tagId) {
+                    updateFilters({ ...filters, tagIds: [tagId] });
+                  } else {
+                    const newFilters = { ...filters };
+                    delete newFilters.tagIds;
+                    updateFilters(newFilters);
+                  }
+                }}
+                selectedTagId={filters.tagIds && filters.tagIds.length === 1 ? filters.tagIds[0] : null}
               />
             )}
           </CardContent>

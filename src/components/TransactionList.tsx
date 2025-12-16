@@ -19,8 +19,10 @@ import {
   Edit,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Tag as TagIcon
 } from "lucide-react";
+import { useTags } from "@/hooks/useTags";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import DiscountModal from "./DiscountModal";
@@ -44,6 +46,7 @@ interface Transaction {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags?: Array<{ id: string; name: string; color: string }>;
 }
 
 type SortOption = 
@@ -65,10 +68,13 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   onDeleteAllRecurring: (transaction: Transaction) => void;
   onDeleteMultiple: (ids: string[]) => void;
+  onTagFilter?: (tagId: string | null) => void; // Callback para filtrar por tag
+  selectedTagId?: string | null; // Tag selecionada para filtro
 }
 
-const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple }: TransactionListProps) => {
+const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple, onTagFilter, selectedTagId }: TransactionListProps) => {
   const [sortOption, setSortOption] = useState<SortOption>("date-desc");
+  const { tags } = useTags();
   
   const [discountModal, setDiscountModal] = useState<{
     isOpen: boolean;
@@ -250,17 +256,18 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      {/* Seletor de Ordenação */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+      {/* Seletores de Ordenação e Filtro por Tag */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">Ordenar por:</span>
+          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Ordenar por:</span>
         </div>
-        <Select value={sortOption} onValueChange={(value: SortOption) => setSortOption(value)}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={sortOption} onValueChange={(value: SortOption) => setSortOption(value)}>
+            <SelectTrigger className="w-[200px] flex-shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
             <SelectItem value="date-desc">
               <div className="flex items-center gap-2">
                 <ArrowDown className="w-3 h-3" />
@@ -323,6 +330,41 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
             </SelectItem>
           </SelectContent>
         </Select>
+        
+        {/* Filtro rápido por Tag - Sempre visível quando há tags e callback */}
+        {tags.length > 0 && onTagFilter ? (
+          <Select 
+            value={selectedTagId || "all"} 
+            onValueChange={(value) => onTagFilter(value === "all" ? null : value)}
+          >
+            <SelectTrigger className="w-[180px] sm:w-[200px] flex-shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <TagIcon className="w-4 h-4 flex-shrink-0" />
+                <SelectValue placeholder="Filtrar por tag" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                <div className="flex items-center gap-2">
+                  <TagIcon className="w-3 h-3" />
+                  Todas as tags
+                </div>
+              </SelectItem>
+              {tags.map((tag) => (
+                <SelectItem key={tag.id} value={tag.id}>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    <span className="truncate">{tag.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+        </div>
       </div>
 
       {sortedTransactions.map((transaction) => (
