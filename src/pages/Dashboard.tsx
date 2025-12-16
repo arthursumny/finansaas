@@ -49,6 +49,8 @@ import ExportModal from "@/components/ExportModal";
 import RecurringUpdateModal from "@/components/RecurringUpdateModal";
 import { ImportModal } from "@/components/ImportModal";
 import BalanceDetailModal from "@/components/BalanceDetailModal";
+import { useTags } from "@/hooks/useTags";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
   const { theme } = useTheme();
@@ -78,6 +80,7 @@ const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions } = useTransactions();
   const { goals, loading: goalsLoading } = useGoals();
+  const { tags } = useTags();
   
   // Hook para filtros avançados
   const {
@@ -489,6 +492,46 @@ const Dashboard = () => {
                     <Settings className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">Categorias</span>
                   </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && tags.length > 0 && (
+                  <Select 
+                    value={filters.tagIds && filters.tagIds.length === 1 ? filters.tagIds[0] : "all"} 
+                    onValueChange={(value) => {
+                      if (value === "all") {
+                        const newFilters = { ...filters };
+                        delete newFilters.tagIds;
+                        updateFilters(newFilters);
+                      } else {
+                        updateFilters({ ...filters, tagIds: [value] });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 sm:h-9 w-auto px-2 sm:px-3 border-secondary/30 text-secondary">
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4" />
+                        <SelectValue placeholder="Tags" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <div className="flex items-center gap-2">
+                          <Tag className="w-3 h-3" />
+                          Todas as tags
+                        </div>
+                      </SelectItem>
+                      {tags.map((tag) => (
+                        <SelectItem key={tag.id} value={tag.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            {tag.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
 
