@@ -81,17 +81,19 @@ const Dashboard = () => {
 
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
-  const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions } = useSubscriptions();
+  const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions, refetch: refetchSubscriptions } = useSubscriptions();
 
   const handleAddSubscription = async (data: SubscriptionFormData) => {
     await addSubscription(data);
-    await ensureMonthlyTransactions(currentDate, 36);
+    const freshSubscriptions = await refetchSubscriptions();
+    await ensureMonthlyTransactions(currentDate, 36, freshSubscriptions);
     await refetch();
   };
 
   const handleUpdateSubscription = async (id: string, data: SubscriptionFormData) => {
     await updateSubscription(id, data);
-    await ensureMonthlyTransactions(currentDate, 36);
+    const freshSubscriptions = await refetchSubscriptions();
+    await ensureMonthlyTransactions(currentDate, 36, freshSubscriptions);
     await refetch();
   };
   const { goals, loading: goalsLoading } = useGoals();

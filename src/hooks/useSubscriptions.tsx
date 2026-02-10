@@ -64,13 +64,16 @@ export const useSubscriptions = () => {
         tags: subscription.subscription_tags?.map((st: any) => st.tag) || []
       }));
 
-      setSubscriptions(subscriptionsWithTags as Subscription[]);
+      const parsed = subscriptionsWithTags as Subscription[];
+      setSubscriptions(parsed);
+      return parsed;
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar assinaturas',
         description: error.message,
         variant: 'destructive',
       });
+      return [] as Subscription[];
     } finally {
       setLoading(false);
     }
@@ -208,10 +211,15 @@ export const useSubscriptions = () => {
     }
   };
 
-  const ensureMonthlyTransactions = useCallback(async (targetDate: Date, monthsAhead = 36) => {
+  const ensureMonthlyTransactions = useCallback(async (
+    targetDate: Date,
+    monthsAhead = 36,
+    subscriptionsOverride?: Subscription[]
+  ) => {
     if (!user) return 0;
 
-    const activeSubscriptions = subscriptions.filter(sub => sub.is_active);
+    const sourceSubscriptions = subscriptionsOverride || subscriptions;
+    const activeSubscriptions = sourceSubscriptions.filter(sub => sub.is_active);
     if (activeSubscriptions.length === 0) return 0;
 
     const monthStart = startOfMonth(targetDate);
