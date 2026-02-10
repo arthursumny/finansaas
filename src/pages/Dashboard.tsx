@@ -34,7 +34,7 @@ import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions, Transaction } from "@/hooks/useTransactions";
-import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useSubscriptions, SubscriptionFormData } from "@/hooks/useSubscriptions";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
 import { CategoryManager } from "@/components/CategoryManager";
@@ -82,6 +82,18 @@ const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
   const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions } = useSubscriptions();
+
+  const handleAddSubscription = async (data: SubscriptionFormData) => {
+    await addSubscription(data);
+    await ensureMonthlyTransactions(currentDate, 36);
+    await refetch();
+  };
+
+  const handleUpdateSubscription = async (id: string, data: SubscriptionFormData) => {
+    await updateSubscription(id, data);
+    await ensureMonthlyTransactions(currentDate, 36);
+    await refetch();
+  };
   const { goals, loading: goalsLoading } = useGoals();
   
   // Hook para filtros avançados
@@ -285,7 +297,7 @@ const Dashboard = () => {
   useEffect(() => {
     const syncSubscriptions = async () => {
       if (subscriptions.length === 0) return;
-      const createdCount = await ensureMonthlyTransactions(currentDate);
+      const createdCount = await ensureMonthlyTransactions(currentDate, 36);
       if (createdCount > 0) {
         await refetch();
       }
@@ -882,8 +894,8 @@ const Dashboard = () => {
               onBack={() => setShowSubscriptionManager(false)}
               subscriptions={subscriptions}
               loading={subscriptionsLoading}
-              addSubscription={addSubscription}
-              updateSubscription={updateSubscription}
+              addSubscription={handleAddSubscription}
+              updateSubscription={handleUpdateSubscription}
               deleteSubscription={deleteSubscription}
             />
           </div>

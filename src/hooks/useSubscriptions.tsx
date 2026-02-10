@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { addMonths, endOfMonth, format, startOfMonth } from 'date-fns';
 
 export interface Subscription {
   id: string;
@@ -208,14 +208,14 @@ export const useSubscriptions = () => {
     }
   };
 
-  const ensureMonthlyTransactions = useCallback(async (targetDate: Date) => {
+  const ensureMonthlyTransactions = useCallback(async (targetDate: Date, monthsAhead = 36) => {
     if (!user) return 0;
 
     const activeSubscriptions = subscriptions.filter(sub => sub.is_active);
     if (activeSubscriptions.length === 0) return 0;
 
     const monthStart = startOfMonth(targetDate);
-    const monthEnd = endOfMonth(targetDate);
+    const monthEnd = endOfMonth(addMonths(targetDate, monthsAhead - 1));
     const monthStartStr = format(monthStart, 'yyyy-MM-dd');
     const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
 
@@ -241,35 +241,41 @@ export const useSubscriptions = () => {
     const inserts: any[] = [];
 
     for (const sub of activeSubscriptions) {
-      const lastDay = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-      const day = Math.min(Math.max(sub.charge_day, 1), lastDay);
-      const occurrenceDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
-      const occurrenceDateStr = format(occurrenceDate, 'yyyy-MM-dd');
+      for (let offset = 0; offset < monthsAhead; offset += 1) {
+        const targetMonth = addMonths(monthStart, offset);
+        const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+        const day = Math.min(Math.max(sub.charge_day, 1), lastDay);
+        const occurrenceDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), day);
+        const occurrenceDateStr = format(occurrenceDate, 'yyyy-MM-dd');
 
-      if (sub.start_date) {
-        const startDate = new Date(sub.start_date);
-        if (startDate > occurrenceDate) {
+        if (sub.start_date) {
+          const startDate = new Date(sub.start_date);
+          const sameMonth =
+            startDate.getFullYear() === occurrenceDate.getFullYear() &&
+            startDate.getMonth() === occurrenceDate.getMonth();
+          if (startDate > occurrenceDate && !sameMonth) {
+            continue;
+          }
+        }
+
+        const key = `${sub.id}_${occurrenceDateStr}`;
+        if (existingKeys.has(key)) {
           continue;
         }
-      }
 
-      const key = `${sub.id}_${occurrenceDateStr}`;
-      if (existingKeys.has(key)) {
-        continue;
+        inserts.push({
+          user_id: user.id,
+          type: sub.type,
+          description: sub.description,
+          amount: sub.amount,
+          date: occurrenceDateStr,
+          category: sub.category,
+          status: sub.status,
+          is_recurring: false,
+          is_subscription: true,
+          subscription_id: sub.id,
+        });
       }
-
-      inserts.push({
-        user_id: user.id,
-        type: sub.type,
-        description: sub.description,
-        amount: sub.amount,
-        date: occurrenceDateStr,
-        category: sub.category,
-        status: sub.status,
-        is_recurring: false,
-        is_subscription: true,
-        subscription_id: sub.id,
-      });
     }
 
     if (inserts.length === 0) return 0;
