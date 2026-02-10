@@ -16,6 +16,8 @@ export interface Transaction {
   is_recurring?: boolean;
   recurrence_type?: "monthly" | "yearly";
   recurrence_count?: number;
+  is_subscription?: boolean;
+  subscription_day?: number;
   recurrence_group_id?: string; // ID para agrupar recorrências
   recurrence_start_date?: string;
   recurrence_end_date?: string;
@@ -86,6 +88,12 @@ export const useTransactions = () => {
     let currentYear = sy;
     let currentMonth = sm; // 1-12
     let currentDay = sd;
+    const baseSubscriptionDay = transaction.subscription_day || currentDay;
+
+    const getClampedDay = (year: number, month: number, day: number) => {
+      const lastDay = new Date(year, month, 0).getDate();
+      return Math.min(Math.max(day, 1), lastDay);
+    };
 
     let count = 0;
     const maxCount = transaction.recurrence_count || 1;
@@ -110,11 +118,23 @@ export const useTransactions = () => {
 
       // Próxima data baseada no tipo de recorrência (cuidando de overflow de meses/dias)
       if (transaction.recurrence_type === 'monthly') {
-        const next = new Date(currentYear, currentMonth - 1, currentDay);
-        next.setMonth(next.getMonth() + 1);
-        currentYear = next.getFullYear();
-        currentMonth = next.getMonth() + 1;
-        currentDay = next.getDate();
+        if (transaction.is_subscription) {
+          let nextYear = currentYear;
+          let nextMonth = currentMonth + 1;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear += 1;
+          }
+          currentYear = nextYear;
+          currentMonth = nextMonth;
+          currentDay = getClampedDay(nextYear, nextMonth, baseSubscriptionDay);
+        } else {
+          const next = new Date(currentYear, currentMonth - 1, currentDay);
+          next.setMonth(next.getMonth() + 1);
+          currentYear = next.getFullYear();
+          currentMonth = next.getMonth() + 1;
+          currentDay = next.getDate();
+        }
       } else if (transaction.recurrence_type === 'yearly') {
         const next = new Date(currentYear, currentMonth - 1, currentDay);
         next.setFullYear(next.getFullYear() + 1);

@@ -72,11 +72,13 @@ export type Database = {
           discount_amount: number | null
           id: string
           is_recurring: boolean | null
+          is_subscription: boolean | null
           original_amount: number | null
           recurrence_count: number | null
           recurrence_end_date: string | null
           recurrence_start_date: string | null
           recurrence_type: string | null
+          subscription_day: number | null
           status: string
           type: string
           updated_at: string | null
@@ -91,11 +93,13 @@ export type Database = {
           discount_amount?: number | null
           id?: string
           is_recurring?: boolean | null
+          is_subscription?: boolean | null
           original_amount?: number | null
           recurrence_count?: number | null
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null
           recurrence_type?: string | null
+          subscription_day?: number | null
           status: string
           type: string
           updated_at?: string | null
@@ -110,11 +114,13 @@ export type Database = {
           discount_amount?: number | null
           id?: string
           is_recurring?: boolean | null
+          is_subscription?: boolean | null
           original_amount?: number | null
           recurrence_count?: number | null
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null
           recurrence_type?: string | null
+          subscription_day?: number | null
           status?: string
           type?: string
           updated_at?: string | null
