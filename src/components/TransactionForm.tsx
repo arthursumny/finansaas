@@ -458,6 +458,67 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
               </Select>
             </div>
 
+            {/* Assinatura */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2">
+                <Label htmlFor="subscription" className="text-sm font-medium text-foreground">
+                  Assinatura mensal
+                </Label>
+                <Switch
+                  id="subscription"
+                  checked={formData.is_subscription}
+                  disabled={isEditing && formData.is_recurring}
+                  onCheckedChange={(checked) => {
+                    const day = formData.subscription_day || selectedDate.getDate();
+                    setFormData(prev => ({
+                      ...prev,
+                      is_subscription: checked,
+                      is_recurring: checked ? true : prev.is_recurring,
+                      recurrence_type: checked ? "monthly" : prev.recurrence_type,
+                      recurrence_count: checked ? (prev.recurrence_count || 1) : prev.recurrence_count,
+                      subscription_day: checked ? day : undefined
+                    }));
+                    if (checked) {
+                      updateDateWithSubscriptionDay(day);
+                    }
+                  }}
+                />
+              </div>
+
+              {formData.is_subscription && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-foreground">Dia de cobranca (1-31)</Label>
+                  <Input
+                    type="text"
+                    value={formData.subscription_day || ''}
+                    className="h-11"
+                    disabled={isEditing && formData.is_recurring}
+                    onChange={(e) => {
+                      const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                      if (numericValue === '') {
+                        setFormData(prev => ({ ...prev, subscription_day: undefined }));
+                        return;
+                      }
+                      const day = Math.min(31, Math.max(1, parseInt(numericValue)));
+                      setFormData(prev => ({ ...prev, subscription_day: day }));
+                      updateDateWithSubscriptionDay(day);
+                    }}
+                    onBlur={() => {
+                      if (!formData.subscription_day) {
+                        const fallbackDay = selectedDate.getDate();
+                        setFormData(prev => ({ ...prev, subscription_day: fallbackDay }));
+                        updateDateWithSubscriptionDay(fallbackDay);
+                      }
+                    }}
+                    placeholder="Ex: 10"
+                  />
+                  <p className="text-xs text-secondary">
+                    Usa o ultimo dia quando o mes nao tiver este dia.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Recorrência */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between py-2">
@@ -465,13 +526,11 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   <Switch
                     id="recurring"
                     checked={formData.is_recurring}
-                    disabled={isEditing && formData.is_recurring}
+                    disabled={(isEditing && formData.is_recurring) || formData.is_subscription}
                     onCheckedChange={(checked) => 
                       setFormData(prev => ({ 
                         ...prev,
-                        is_recurring: checked,
-                        is_subscription: checked ? prev.is_subscription : false,
-                        subscription_day: checked ? prev.subscription_day : undefined
+                        is_recurring: checked
                       }))
                     }
                   />
@@ -484,13 +543,11 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                         <Label className="text-sm font-medium text-foreground">Tipo</Label>
                         <Select
                           value={formData.recurrence_type}
-                          disabled={isEditing && formData.is_recurring}
+                          disabled={(isEditing && formData.is_recurring) || formData.is_subscription}
                           onValueChange={(value: "monthly" | "yearly") => 
                             setFormData(prev => ({
                               ...prev,
-                              recurrence_type: value,
-                              is_subscription: value === "monthly" ? prev.is_subscription : false,
-                              subscription_day: value === "monthly" ? prev.subscription_day : undefined
+                              recurrence_type: value
                             }))
                           }
                         >
@@ -512,7 +569,6 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                           disabled={isEditing && formData.is_recurring}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Permite entrada vazia temporariamente
                             if (value === '') {
                               setFormData(prev => ({ 
                                 ...prev, 
@@ -521,7 +577,6 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                               return;
                             }
                             
-                            // Remove caracteres não numéricos
                             const numericValue = value.replace(/[^0-9]/g, '');
                             if (numericValue === '') {
                               setFormData(prev => ({ 
@@ -541,7 +596,6 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                             }
                           }}
                           onBlur={(e) => {
-                            // Garante que tem um valor válido ao sair do campo
                             if (!formData.recurrence_count) {
                               setFormData(prev => ({ 
                                 ...prev, 
@@ -556,65 +610,6 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                         </p>
                       </div>
                     </div>
-
-                    {formData.recurrence_type === "monthly" && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between py-2">
-                          <Label htmlFor="subscription" className="text-sm font-medium text-foreground">
-                            Assinatura mensal
-                          </Label>
-                          <Switch
-                            id="subscription"
-                            checked={formData.is_subscription}
-                            disabled={isEditing && formData.is_recurring}
-                            onCheckedChange={(checked) => {
-                              const day = formData.subscription_day || selectedDate.getDate();
-                              setFormData(prev => ({
-                                ...prev,
-                                is_subscription: checked,
-                                subscription_day: checked ? day : undefined
-                              }));
-                              if (checked) {
-                                updateDateWithSubscriptionDay(day);
-                              }
-                            }}
-                          />
-                        </div>
-
-                        {formData.is_subscription && (
-                          <div className="space-y-3">
-                            <Label className="text-sm font-medium text-foreground">Dia de cobranca (1-31)</Label>
-                            <Input
-                              type="text"
-                              value={formData.subscription_day || ''}
-                              className="h-11"
-                              disabled={isEditing && formData.is_recurring}
-                              onChange={(e) => {
-                                const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                                if (numericValue === '') {
-                                  setFormData(prev => ({ ...prev, subscription_day: undefined }));
-                                  return;
-                                }
-                                const day = Math.min(31, Math.max(1, parseInt(numericValue)));
-                                setFormData(prev => ({ ...prev, subscription_day: day }));
-                                updateDateWithSubscriptionDay(day);
-                              }}
-                              onBlur={() => {
-                                if (!formData.subscription_day) {
-                                  const fallbackDay = selectedDate.getDate();
-                                  setFormData(prev => ({ ...prev, subscription_day: fallbackDay }));
-                                  updateDateWithSubscriptionDay(fallbackDay);
-                                }
-                              }}
-                              placeholder="Ex: 10"
-                            />
-                            <p className="text-xs text-secondary">
-                              Usa o ultimo dia quando o mes nao tiver este dia.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
