@@ -78,6 +78,7 @@ export type Database = {
           recurrence_end_date: string | null
           recurrence_start_date: string | null
           recurrence_type: string | null
+          subscription_id: string | null
           subscription_day: number | null
           status: string
           type: string
@@ -99,6 +100,7 @@ export type Database = {
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null
           recurrence_type?: string | null
+          subscription_id?: string | null
           subscription_day?: number | null
           status: string
           type: string
@@ -120,11 +122,99 @@ export type Database = {
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null
           recurrence_type?: string | null
+          subscription_id?: string | null
           subscription_day?: number | null
           status?: string
           type?: string
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          amount: number
+          category: string
+          charge_day: number
+          created_at: string | null
+          description: string
+          id: string
+          is_active: boolean
+          start_date: string
+          status: string
+          type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          charge_day: number
+          created_at?: string | null
+          description: string
+          id?: string
+          is_active?: boolean
+          start_date?: string
+          status: string
+          type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          charge_day?: number
+          created_at?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean
+          start_date?: string
+          status?: string
+          type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transaction_tags: {
+        Row: {
+          created_at: string | null
+          id: string
+          tag_id: string
+          transaction_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          tag_id: string
+          transaction_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          tag_id?: string
+          transaction_id?: string
+        }
+        Relationships: []
+      }
+      subscription_tags: {
+        Row: {
+          created_at: string | null
+          id: string
+          subscription_id: string
+          tag_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          subscription_id: string
+          tag_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          subscription_id?: string
+          tag_id?: string
         }
         Relationships: []
       }

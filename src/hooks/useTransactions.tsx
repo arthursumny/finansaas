@@ -18,6 +18,7 @@ export interface Transaction {
   recurrence_count?: number;
   is_subscription?: boolean;
   subscription_day?: number;
+  subscription_id?: string | null;
   recurrence_group_id?: string; // ID para agrupar recorrências
   recurrence_start_date?: string;
   recurrence_end_date?: string;
