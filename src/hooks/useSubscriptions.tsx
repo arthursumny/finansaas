@@ -302,7 +302,7 @@ export const useSubscriptions = () => {
 
     const { data: createdTransactions, error: insertError } = await supabase
       .from('transactions')
-      .insert(inserts)
+      .insert(inserts, { onConflict: 'subscription_id,date', ignoreDuplicates: true })
       .select();
 
     if (insertError) {
