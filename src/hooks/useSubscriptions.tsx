@@ -239,6 +239,11 @@ export const useSubscriptions = () => {
 
     if (existingError) {
       console.error('Erro ao buscar transacoes de assinatura:', existingError);
+      toast({
+        title: 'Erro ao gerar assinaturas',
+        description: existingError.message,
+        variant: 'destructive',
+      });
       return 0;
     }
 
@@ -295,6 +300,11 @@ export const useSubscriptions = () => {
 
     if (insertError) {
       console.error('Erro ao criar transacoes de assinatura:', insertError);
+      toast({
+        title: 'Erro ao gerar assinaturas',
+        description: insertError.message,
+        variant: 'destructive',
+      });
       return 0;
     }
 
@@ -323,6 +333,10 @@ export const useSubscriptions = () => {
 
       if (tagError) {
         console.error('Erro ao associar tags nas transacoes de assinatura:', tagError);
+        toast({
+          title: 'Aviso ao gerar tags',
+          description: tagError.message,
+        });
       }
     }
 
