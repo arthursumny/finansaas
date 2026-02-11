@@ -189,6 +189,13 @@ export const useSubscriptions = () => {
     if (!user) return;
 
     try {
+      const { error: transactionsError } = await supabase
+        .from('transactions')
+        .delete()
+        .match({ user_id: user.id, subscription_id: id });
+
+      if (transactionsError) throw transactionsError;
+
       const { error } = await supabase
         .from('subscriptions')
         .delete()

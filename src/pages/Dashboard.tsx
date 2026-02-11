@@ -96,6 +96,11 @@ const Dashboard = () => {
     await ensureMonthlyTransactions(currentDate, 36, freshSubscriptions);
     await refetch();
   };
+
+  const handleDeleteSubscription = async (id: string) => {
+    await deleteSubscription(id);
+    await refetch();
+  };
   const { goals, loading: goalsLoading } = useGoals();
   
   // Hook para filtros avançados
@@ -898,7 +903,7 @@ const Dashboard = () => {
               loading={subscriptionsLoading}
               addSubscription={handleAddSubscription}
               updateSubscription={handleUpdateSubscription}
-              deleteSubscription={deleteSubscription}
+              deleteSubscription={handleDeleteSubscription}
             />
           </div>
         </div>
