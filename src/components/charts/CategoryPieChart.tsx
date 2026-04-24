@@ -47,9 +47,9 @@ const CategoryPieChart = ({
    * Agrupa transações por categoria e calcula totais
    */
   const chartData = useMemo(() => {
-    // Filtrar transações pelo tipo e status pago
+    // Filtrar lançamentos pelo tipo, independente do status
     const filteredTransactions = transactions.filter(
-      transaction => transaction.type === type && transaction.status === 'paid'
+      transaction => transaction.type === type
     );
 
     // Agrupar por categoria

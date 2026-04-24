@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 import { addMonths, addYears, format, isAfter, isSameDay } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface Transaction {
   id: string;
@@ -82,7 +81,7 @@ export const useTransactions = () => {
       return [transaction];
     }
 
-    const recurrenceGroupId = uuidv4(); // Gera um ID único para o grupo
+    const recurrenceGroupId = crypto.randomUUID(); // Gera um ID único para o grupo
 
     // Parse local da data no formato yyyy-MM-dd para evitar timezone
     const [sy, sm, sd] = transaction.date.split('-').map(Number);

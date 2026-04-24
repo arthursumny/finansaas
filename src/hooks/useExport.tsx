@@ -2,7 +2,6 @@ import { useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Transaction } from './useTransactions';
@@ -41,6 +40,32 @@ export const useExport = () => {
    */
   const formatDate = (date: string) => {
     return format(new Date(date), 'dd/MM/yyyy', { locale: ptBR });
+  };
+
+  const downloadTextFile = (content: string, fileName: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const escapeCsvValue = (value: string | number | boolean | null | undefined) => {
+    const text = String(value ?? '');
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const escapeHtml = (value: string | number | boolean | null | undefined) => {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   };
 
   /**
@@ -240,28 +265,34 @@ export const useExport = () => {
    */
   const exportToExcel = async (transactions: Transaction[], options: ExportOptions) => {
     try {
-      // Preparar dados para o Excel
-      const excelData = transactions.map(transaction => ({
-        'Data': formatDate(transaction.date),
-        'Descrição': transaction.description,
-        'Categoria': transaction.category,
-        'Tipo': transaction.type === 'income' ? 'Receita' : 'Despesa',
-        'Valor': transaction.amount,
-        'Valor Formatado': formatCurrency(transaction.amount),
-        'Status': transaction.status === 'paid' ? 'Pago' : 'Pendente',
-        'Recorrente': transaction.is_recurring ? 'Sim' : 'Não',
-        'Tipo de Recorrência': transaction.recurrence_type || '',
-        'Desconto': transaction.discount_amount || 0,
-        'Valor Original': transaction.original_amount || transaction.amount
-      }));
-      
-      // Criar workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Criar worksheet com os dados
-      const ws = XLSX.utils.json_to_sheet(excelData);
-      
-      // Adicionar resumo financeiro
+      const headers = [
+        'Data',
+        'Descrição',
+        'Categoria',
+        'Tipo',
+        'Valor',
+        'Valor Formatado',
+        'Status',
+        'Recorrente',
+        'Tipo de Recorrência',
+        'Desconto',
+        'Valor Original'
+      ];
+
+      const rows = transactions.map(transaction => [
+        formatDate(transaction.date),
+        transaction.description,
+        transaction.category,
+        transaction.type === 'income' ? 'Receita' : 'Despesa',
+        transaction.amount,
+        formatCurrency(transaction.amount),
+        transaction.status === 'paid' ? 'Pago' : 'Pendente',
+        transaction.is_recurring ? 'Sim' : 'Não',
+        transaction.recurrence_type || '',
+        transaction.discount_amount || 0,
+        transaction.original_amount || transaction.amount
+      ]);
+
       const totalIncome = transactions
         .filter(t => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
@@ -271,24 +302,43 @@ export const useExport = () => {
         .reduce((sum, t) => sum + t.amount, 0);
       
       const balance = totalIncome - totalExpense;
-      
-      // Adicionar linhas de resumo
-      const summaryData = [
-        {},
-        { 'Data': 'RESUMO FINANCEIRO' },
-        { 'Data': 'Total de Receitas', 'Valor Formatado': formatCurrency(totalIncome) },
-        { 'Data': 'Total de Despesas', 'Valor Formatado': formatCurrency(totalExpense) },
-        { 'Data': 'Saldo', 'Valor Formatado': formatCurrency(balance) }
+
+      const tableRows = [
+        headers,
+        ...rows,
+        [],
+        ['RESUMO FINANCEIRO'],
+        ['Total de Receitas', '', '', '', totalIncome, formatCurrency(totalIncome)],
+        ['Total de Despesas', '', '', '', totalExpense, formatCurrency(totalExpense)],
+        ['Saldo', '', '', '', balance, formatCurrency(balance)]
       ];
-      
-      XLSX.utils.sheet_add_json(ws, summaryData, { origin: -1, skipHeader: true });
-      
-      // Adicionar worksheet ao workbook
-      XLSX.utils.book_append_sheet(wb, ws, 'Transações');
-      
-      // Salvar arquivo
-      const fileName = `transacoes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+
+      const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      table { border-collapse: collapse; font-family: Arial, sans-serif; }
+      th, td { border: 1px solid #d0d7de; padding: 6px 8px; }
+      th { background: #428bca; color: #ffffff; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <table>
+      ${tableRows.map((row, rowIndex) => `
+        <tr>
+          ${row.map((cell) => rowIndex === 0
+            ? `<th>${escapeHtml(cell)}</th>`
+            : `<td>${escapeHtml(cell)}</td>`
+          ).join('')}
+        </tr>
+      `).join('')}
+    </table>
+  </body>
+</html>`;
+
+      const fileName = `transacoes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xls`;
+      downloadTextFile(html, fileName, 'application/vnd.ms-excel;charset=utf-8');
       
       return fileName;
     } catch (error) {
@@ -302,28 +352,24 @@ export const useExport = () => {
    */
   const exportToCSV = async (transactions: Transaction[], options: ExportOptions) => {
     try {
-      // Preparar dados para o CSV
-      const csvData = transactions.map(transaction => ({
-        'Data': formatDate(transaction.date),
-        'Descrição': transaction.description,
-        'Categoria': transaction.category,
-        'Tipo': transaction.type === 'income' ? 'Receita' : 'Despesa',
-        'Valor': transaction.amount,
-        'Status': transaction.status === 'paid' ? 'Pago' : 'Pendente',
-        'Recorrente': transaction.is_recurring ? 'Sim' : 'Não',
-        'Desconto': transaction.discount_amount || 0
-      }));
-      
-      // Criar worksheet
-      const ws = XLSX.utils.json_to_sheet(csvData);
-      
-      // Criar workbook
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Transações');
-      
-      // Salvar como CSV
+      const headers = ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Status', 'Recorrente', 'Desconto'];
+      const rows = transactions.map(transaction => [
+        formatDate(transaction.date),
+        transaction.description,
+        transaction.category,
+        transaction.type === 'income' ? 'Receita' : 'Despesa',
+        transaction.amount,
+        transaction.status === 'paid' ? 'Pago' : 'Pendente',
+        transaction.is_recurring ? 'Sim' : 'Não',
+        transaction.discount_amount || 0
+      ]);
+
+      const csv = [headers, ...rows]
+        .map(row => row.map(escapeCsvValue).join(';'))
+        .join('\n');
+
       const fileName = `transacoes_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.csv`;
-      XLSX.writeFile(wb, fileName, { bookType: 'csv' });
+      downloadTextFile(`\uFEFF${csv}`, fileName, 'text/csv;charset=utf-8');
       
       return fileName;
     } catch (error) {

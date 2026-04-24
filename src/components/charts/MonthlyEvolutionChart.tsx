@@ -36,10 +36,10 @@ const MonthlyEvolutionChart = ({ transactions }: MonthlyEvolutionChartProps) => 
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
       
-      // Filtrar transações do mês
+      // Filtrar lançamentos do mês, independente do status
       const monthTransactions = transactions.filter(transaction => {
         const transactionDate = new Date(transaction.date + 'T00:00:00');
-        return transactionDate >= monthStart && transactionDate <= monthEnd && transaction.status === 'paid';
+        return transactionDate >= monthStart && transactionDate <= monthEnd;
       });
       
       // Calcular totais
