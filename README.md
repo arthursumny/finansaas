@@ -60,6 +60,14 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## API for AI agents
+
+This repo includes a Supabase Edge Function at `supabase/functions/finansaas-api` for Telegram or other AI agents.
+
+- Swagger UI: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/docs`
+- OpenAPI JSON: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/openapi.json`
+- Setup and examples: `supabase/functions/finansaas-api/README.md`
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/f80b2f27-caec-46f3-b056-2f50866ff9a7) and click on Share -> Publish.

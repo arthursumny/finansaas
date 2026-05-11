@@ -1,1 +1,4 @@
 project_id = "uypqpxmkhnuloxtxeflc"
+
+[functions.finansaas-api]
+verify_jwt = false
