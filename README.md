@@ -66,6 +66,7 @@ This repo includes a Supabase Edge Function at `supabase/functions/finansaas-api
 
 - Swagger UI: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/docs`
 - OpenAPI JSON: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/openapi.json`
+- Tokens por conta: acesse `Dashboard > API`
 - Setup and examples: `supabase/functions/finansaas-api/README.md`
 
 ## How can I deploy this project?

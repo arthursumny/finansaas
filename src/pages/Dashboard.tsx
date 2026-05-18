@@ -20,7 +20,8 @@ import {
   Upload,
   Info,
   Tag,
-  CreditCard
+  CreditCard,
+  KeyRound
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
@@ -42,6 +43,7 @@ import { BudgetManager } from "@/components/BudgetManager";
 import { GoalManager } from "@/components/GoalManager";
 import { TagManager } from "@/components/TagManager";
 import { SubscriptionManager } from "@/components/SubscriptionManager";
+import { ApiTokenManager } from "@/components/ApiTokenManager";
 import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
 import CategoryPieChart from "@/components/charts/CategoryPieChart";
 import TransactionFiltersComponent from "@/components/filters/TransactionFilters";
@@ -66,6 +68,7 @@ const Dashboard = () => {
   const [showGoalManager, setShowGoalManager] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [showSubscriptionManager, setShowSubscriptionManager] = useState(false);
+  const [showApiTokenManager, setShowApiTokenManager] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -187,18 +190,14 @@ const Dashboard = () => {
       console.log('Confirmando atualização de todas as transações recorrentes');
       const old = editingTransaction;
       const newData = recurringUpdateModal.transactionData;
-      const updates = {};
-      const groupFields = ['type', 'description', 'amount', 'category', 'status'];
-      for (let field of groupFields) {
+      const updates: Partial<Transaction> = {};
+      const groupFields: Array<keyof Pick<Transaction, 'type' | 'description' | 'amount' | 'category' | 'status'>> = ['type', 'description', 'amount', 'category', 'status'];
+      for (const field of groupFields) {
         if (newData[field] !== old[field]) {
           updates[field] = newData[field];
         }
       }
       const dateChanged = newData.date !== old.date;
-      // Remove campos de recorrência se presentes
-      delete (updates as any).is_recurring;
-      delete (updates as any).recurrence_type;
-      delete (updates as any).recurrence_count;
       await updateAllRecurringTransactions(editingTransaction, updates);
       if (dateChanged) {
         await updateTransaction(editingTransaction.id, { date: newData.date });
@@ -327,7 +326,7 @@ const Dashboard = () => {
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4">
-              {(showCategoryManager || showBudgetManager || showGoalManager || showTagManager || showSubscriptionManager) && (
+              {(showCategoryManager || showBudgetManager || showGoalManager || showTagManager || showSubscriptionManager || showApiTokenManager) && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -337,6 +336,7 @@ const Dashboard = () => {
                     setShowGoalManager(false);
                     setShowTagManager(false);
                     setShowSubscriptionManager(false);
+                    setShowApiTokenManager(false);
                   }}
                   className="h-9"
                 >
@@ -414,6 +414,20 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </>
+              ) : showApiTokenManager ? (
+                <>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
+                    <KeyRound className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                      API
+                    </h1>
+                    <p className="text-xs sm:text-sm text-secondary hidden sm:block">
+                      Tokens para agentes e automacoes
+                    </p>
+                  </div>
+                </>
               ) : (
                 <img 
                   src={actualTheme === 'dark' ? '/logo_branca.png' : '/logo_preta.png'} 
@@ -425,7 +439,7 @@ const Dashboard = () => {
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Menu hambúrguer para dispositivos móveis */}
               <div className="sm:hidden">
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -467,6 +481,10 @@ const Dashboard = () => {
                         <CreditCard className="w-4 h-4 mr-2" />
                         Assinaturas Mensais
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowApiTokenManager(true)}>
+                        <KeyRound className="w-4 h-4 mr-2" />
+                        Tokens da API
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -474,7 +492,7 @@ const Dashboard = () => {
 
               {/* Botões individuais para telas maiores */}
               <div className="hidden sm:flex items-center gap-2">
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant={showCharts ? "default" : "outline"}
                     size="sm"
@@ -486,7 +504,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -498,7 +516,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Importar</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -510,7 +528,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Exportar</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -522,7 +540,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Metas</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -534,7 +552,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Orçamentos</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -545,7 +563,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Categorias</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -555,6 +573,18 @@ const Dashboard = () => {
                   >
                     <CreditCard className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">Assinaturas</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowApiTokenManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Tokens da API"
+                  >
+                    <KeyRound className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">API</span>
                   </Button>
                 )}
               </div>
@@ -905,6 +935,15 @@ const Dashboard = () => {
               updateSubscription={handleUpdateSubscription}
               deleteSubscription={handleDeleteSubscription}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Gerenciador de Tokens da API */}
+      {showApiTokenManager && (
+        <div className="fixed inset-0 bg-background z-50 overflow-auto">
+          <div className="container mx-auto px-4 sm:px-6 py-6">
+            <ApiTokenManager onBack={() => setShowApiTokenManager(false)} />
           </div>
         </div>
       )}

@@ -75,6 +75,65 @@ const openApiSpec = {
         responses: { "200": { description: "Resumo financeiro" }, "401": { description: "Nao autenticado" } },
       },
     },
+    "/charts/monthly-evolution": {
+      get: {
+        tags: ["Resumo"],
+        summary: "Dados de evolucao mensal para graficos",
+        parameters: [
+          { name: "months", in: "query", schema: { type: "integer", minimum: 1, maximum: 36, default: 6 } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["paid", "pending"] } },
+        ],
+        responses: { "200": { description: "Series mensais de receitas, despesas e saldo" } },
+      },
+    },
+    "/charts/category-breakdown": {
+      get: {
+        tags: ["Resumo"],
+        summary: "Distribuicao por categoria",
+        parameters: [
+          { name: "from", in: "query", schema: { type: "string", format: "date" } },
+          { name: "to", in: "query", schema: { type: "string", format: "date" } },
+          { name: "type", in: "query", schema: { type: "string", enum: ["income", "expense"] } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["paid", "pending"] } },
+        ],
+        responses: { "200": { description: "Totais agrupados por categoria" } },
+      },
+    },
+    "/charts/cashflow": {
+      get: {
+        tags: ["Resumo"],
+        summary: "Fluxo de caixa acumulado por dia",
+        parameters: [
+          { name: "from", in: "query", schema: { type: "string", format: "date" } },
+          { name: "to", in: "query", schema: { type: "string", format: "date" } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["paid", "pending"] } },
+        ],
+        responses: { "200": { description: "Serie diaria de saldo acumulado" } },
+      },
+    },
+    "/agent/categorize": {
+      post: {
+        tags: ["Transacoes"],
+        summary: "Sugere categoria para um lancamento",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["description", "type"],
+                properties: {
+                  description: { type: "string", example: "Uber para reuniao" },
+                  type: { type: "string", enum: ["income", "expense"] },
+                  amount: { type: "number" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Categoria sugerida" } },
+      },
+    },
     "/categories": {
       get: {
         tags: ["Categorias"],
@@ -119,7 +178,7 @@ const openApiSpec = {
       },
       post: {
         tags: ["Transacoes"],
-        summary: "Cria uma transacao",
+        summary: "Cria uma transacao. Se category nao for enviada, a API tenta categorizar automaticamente.",
         requestBody: {
           required: true,
           content: {
@@ -176,7 +235,7 @@ const openApiSpec = {
     schemas: {
       TransactionInput: {
         type: "object",
-        required: ["type", "description", "amount", "date", "category", "status"],
+        required: ["type", "description", "amount", "date", "status"],
         properties: {
           type: { type: "string", enum: ["income", "expense"] },
           description: { type: "string", minLength: 1 },
@@ -221,6 +280,22 @@ Deno.serve(async (req) => {
       return handleSummary(auth, url);
     }
 
+    if (req.method === "GET" && pathname === "/charts/monthly-evolution") {
+      return handleMonthlyEvolution(auth, url);
+    }
+
+    if (req.method === "GET" && pathname === "/charts/category-breakdown") {
+      return handleCategoryBreakdown(auth, url);
+    }
+
+    if (req.method === "GET" && pathname === "/charts/cashflow") {
+      return handleCashflow(auth, url);
+    }
+
+    if (req.method === "POST" && pathname === "/agent/categorize") {
+      return handleCategorize(auth, req);
+    }
+
     if (req.method === "GET" && pathname === "/categories") {
       return handleListCategories(auth, url);
     }
@@ -260,7 +335,12 @@ async function authenticate(req: Request): Promise<AuthContext> {
   const integrationKey = req.headers.get("x-finansaas-api-key") ?? getBearerToken(req);
 
   if (integrationKey) {
-    const userId = resolveUserIdFromApiKey(integrationKey);
+    const tokenAuth = await resolveUserIdFromStoredApiKey(integrationKey);
+    if (tokenAuth) {
+      return tokenAuth;
+    }
+
+    const userId = resolveUserIdFromEnvApiKey(integrationKey);
     if (userId) {
       ensureServiceRoleConfigured();
       return {
@@ -289,6 +369,33 @@ async function authenticate(req: Request): Promise<AuthContext> {
   }
 
   return { userId: data.user.id, client, mode: "jwt" };
+}
+
+async function resolveUserIdFromStoredApiKey(apiKey: string): Promise<AuthContext | null> {
+  ensureServiceRoleConfigured();
+  const client = serviceClient();
+  const tokenHash = await hashToken(apiKey);
+
+  const { data, error } = await client
+    .from("api_tokens")
+    .select("id, user_id")
+    .eq("token_hash", tokenHash)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (error) throw dbError(error);
+  if (!data) return null;
+
+  await client
+    .from("api_tokens")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", data.id);
+
+  return {
+    userId: data.user_id,
+    mode: "api-key",
+    client,
+  };
 }
 
 async function handleSummary(auth: AuthContext, url: URL): Promise<Response> {
@@ -322,6 +429,137 @@ async function handleSummary(auth: AuthContext, url: URL): Promise<Response> {
     count: transactions.length,
     by_category: byCategory,
   });
+}
+
+async function handleMonthlyEvolution(auth: AuthContext, url: URL): Promise<Response> {
+  const months = parseBoundedInteger(url.searchParams.get("months"), "months", 1, 36, 6);
+  const monthKeys = lastMonthKeys(months);
+  const from = `${monthKeys[0]}-01`;
+
+  let query = auth.client
+    .from("transactions")
+    .select("type, amount, status, date")
+    .eq("user_id", auth.userId)
+    .gte("date", from);
+
+  const status = url.searchParams.get("status");
+  if (status) query = query.eq("status", assertEnum(status, ["paid", "pending"], "status"));
+
+  const { data, error } = await query;
+  if (error) throw dbError(error);
+
+  const series = monthKeys.map((month) => ({
+    month,
+    income: 0,
+    expenses: 0,
+    balance: 0,
+    count: 0,
+  }));
+  const byMonth = new Map(series.map((item) => [item.month, item]));
+
+  for (const transaction of data ?? []) {
+    const month = String(transaction.date).slice(0, 7);
+    const item = byMonth.get(month);
+    if (!item) continue;
+
+    const amount = Number(transaction.amount);
+    if (transaction.type === "income") item.income += amount;
+    if (transaction.type === "expense") item.expenses += amount;
+    item.balance = Number((item.income - item.expenses).toFixed(2));
+    item.count += 1;
+  }
+
+  return json({ data: series });
+}
+
+async function handleCategoryBreakdown(auth: AuthContext, url: URL): Promise<Response> {
+  let query = auth.client
+    .from("transactions")
+    .select("type, amount, status, date, category")
+    .eq("user_id", auth.userId);
+
+  query = applyTransactionFilters(query, url);
+
+  const { data, error } = await query;
+  if (error) throw dbError(error);
+
+  const totals = new Map<string, { category: string; income: number; expenses: number; total: number; count: number }>();
+
+  for (const transaction of data ?? []) {
+    const category = transaction.category || "Sem categoria";
+    const current = totals.get(category) ?? { category, income: 0, expenses: 0, total: 0, count: 0 };
+    const amount = Number(transaction.amount);
+
+    if (transaction.type === "income") current.income += amount;
+    if (transaction.type === "expense") current.expenses += amount;
+    current.total += amount;
+    current.count += 1;
+    totals.set(category, current);
+  }
+
+  const totalAmount = Array.from(totals.values()).reduce((total, item) => total + item.total, 0);
+  const breakdown = Array.from(totals.values())
+    .map((item) => ({
+      ...item,
+      income: Number(item.income.toFixed(2)),
+      expenses: Number(item.expenses.toFixed(2)),
+      total: Number(item.total.toFixed(2)),
+      percentage: totalAmount > 0 ? Number(((item.total / totalAmount) * 100).toFixed(2)) : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  return json({ data: breakdown });
+}
+
+async function handleCashflow(auth: AuthContext, url: URL): Promise<Response> {
+  let query = auth.client
+    .from("transactions")
+    .select("type, amount, status, date")
+    .eq("user_id", auth.userId)
+    .order("date", { ascending: true });
+
+  query = applyTransactionFilters(query, url);
+
+  const { data, error } = await query;
+  if (error) throw dbError(error);
+
+  const totals = new Map<string, { date: string; income: number; expenses: number; balance: number }>();
+
+  for (const transaction of data ?? []) {
+    const date = transaction.date;
+    const current = totals.get(date) ?? { date, income: 0, expenses: 0, balance: 0 };
+    const amount = Number(transaction.amount);
+
+    if (transaction.type === "income") current.income += amount;
+    if (transaction.type === "expense") current.expenses += amount;
+    current.balance = Number((current.income - current.expenses).toFixed(2));
+    totals.set(date, current);
+  }
+
+  let cumulative = 0;
+  const series = Array.from(totals.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((item) => {
+      cumulative += item.balance;
+      return {
+        ...item,
+        income: Number(item.income.toFixed(2)),
+        expenses: Number(item.expenses.toFixed(2)),
+        balance: Number(item.balance.toFixed(2)),
+        cumulative_balance: Number(cumulative.toFixed(2)),
+      };
+    });
+
+  return json({ data: series });
+}
+
+async function handleCategorize(auth: AuthContext, req: Request): Promise<Response> {
+  const body = await readJson(req);
+  const description = requireString(body.description, "description");
+  const type = assertEnum(body.type, ["income", "expense"], "type");
+  const suggestion = await suggestCategory(auth, { description, type });
+
+  return json({ data: suggestion });
 }
 
 async function handleListCategories(auth: AuthContext, url: URL): Promise<Response> {
@@ -411,10 +649,14 @@ async function handleGetTransaction(auth: AuthContext, id: string): Promise<Resp
 async function handleCreateTransaction(auth: AuthContext, req: Request): Promise<Response> {
   const payload = validateTransactionPayload(await readJson(req), true);
   const { tag_ids, ...transaction } = payload;
+  const category = transaction.category ?? (await suggestCategory(auth, {
+    description: transaction.description ?? "",
+    type: transaction.type ?? "expense",
+  })).category;
 
   const { data, error } = await auth.client
     .from("transactions")
-    .insert({ ...transaction, user_id: auth.userId })
+    .insert({ ...transaction, category, user_id: auth.userId })
     .select()
     .single();
 
@@ -544,7 +786,7 @@ function validateTransactionPayload(body: Record<string, unknown>, requireAll: b
   if (requireAll || body.date !== undefined) {
     payload.date = requireDate(body.date, "date");
   }
-  if (requireAll || body.category !== undefined) {
+  if (body.category !== undefined) {
     payload.category = requireString(body.category, "category");
   }
   if (requireAll || body.status !== undefined) {
@@ -583,7 +825,89 @@ function applyTransactionFilters<T extends QueryBuilder>(query: T, url: URL): T 
   return filteredQuery;
 }
 
-function resolveUserIdFromApiKey(apiKey: string): string | null {
+async function suggestCategory(auth: AuthContext, input: { description: string; type: "income" | "expense" }) {
+  const { data, error } = await auth.client
+    .from("categories")
+    .select("id, name, type")
+    .eq("user_id", auth.userId)
+    .eq("type", input.type)
+    .order("name", { ascending: true });
+
+  if (error) throw dbError(error);
+
+  const categories = data ?? [];
+  const normalizedDescription = normalizeText(input.description);
+  const scored = categories
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      type: category.type,
+      score: categoryScore(category.name, normalizedDescription, input.type),
+    }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
+  const fallback = scored.find((category) => normalizeText(category.name) === "outros") ?? scored[0];
+  const best = scored[0] && scored[0].score > 0 ? scored[0] : fallback;
+
+  if (!best) {
+    return {
+      category: input.type === "income" ? "Outros" : "Outros",
+      confidence: 0,
+      reason: "Nenhuma categoria cadastrada para esse tipo.",
+      alternatives: [],
+    };
+  }
+
+  return {
+    category: best.name,
+    category_id: best.id,
+    confidence: best.score > 0 ? Math.min(0.95, 0.45 + best.score / 10) : 0.25,
+    reason: best.score > 0 ? "Categoria sugerida por palavras-chave e nomes das categorias cadastradas." : "Categoria padrao usada por falta de correspondencia forte.",
+    alternatives: scored
+      .filter((category) => category.id !== best.id)
+      .slice(0, 3)
+      .map((category) => ({ category: category.name, category_id: category.id, score: category.score })),
+  };
+}
+
+function categoryScore(categoryName: string, normalizedDescription: string, type: "income" | "expense") {
+  const normalizedCategory = normalizeText(categoryName);
+  let score = normalizedDescription.includes(normalizedCategory) ? 5 : 0;
+
+  const keywords: Record<string, string[]> = {
+    alimentacao: ["mercado", "supermercado", "restaurante", "ifood", "almoco", "jantar", "lanche", "padaria", "acai"],
+    transporte: ["uber", "99", "taxi", "combustivel", "gasolina", "onibus", "metro", "estacionamento"],
+    moradia: ["aluguel", "condominio", "energia", "luz", "agua", "internet", "casa", "apartamento"],
+    saude: ["farmacia", "medico", "consulta", "exame", "hospital", "dentista", "remedio"],
+    educacao: ["curso", "faculdade", "escola", "livro", "mentoria"],
+    lazer: ["cinema", "netflix", "spotify", "bar", "show", "viagem", "hotel"],
+    contas: ["boleto", "cartao", "fatura", "telefone", "seguro"],
+    salario: ["salario", "pagamento", "empresa", "holerite"],
+    freelance: ["freela", "freelance", "cliente", "projeto"],
+    investimentos: ["dividendo", "rendimento", "investimento", "cdb", "tesouro"],
+  };
+
+  for (const [categoryKeyword, words] of Object.entries(keywords)) {
+    if (!normalizedCategory.includes(categoryKeyword)) continue;
+    score += words.filter((word) => normalizedDescription.includes(word)).length * 3;
+  }
+
+  if (type === "income" && normalizedDescription.match(/pix recebido|recebido|deposito|transferencia recebida/)) {
+    score += normalizedCategory.includes("outros") ? 1 : 0;
+  }
+
+  return score;
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function resolveUserIdFromEnvApiKey(apiKey: string): string | null {
   const raw = Deno.env.get("FINANSAAS_API_KEYS");
   if (!raw) return null;
 
@@ -602,6 +926,20 @@ function resolveUserIdFromApiKey(apiKey: string): string | null {
   }
 
   return null;
+}
+
+async function hashToken(token: string) {
+  const data = new TextEncoder().encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function serviceClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 function normalizePath(pathname: string) {
@@ -624,12 +962,30 @@ function normalizeTransaction(row: TransactionRow) {
 }
 
 function parseLimit(value: string | null) {
-  if (!value) return 50;
+  return parseBoundedInteger(value, "limit", 1, 100, 50);
+}
+
+function parseBoundedInteger(value: string | null, field: string, min: number, max: number, fallback: number) {
+  if (!value) return fallback;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-    throw new ApiError(422, "invalid_limit", "limit deve ser um inteiro entre 1 e 100.");
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new ApiError(422, "invalid_field", `${field} deve ser um inteiro entre ${min} e ${max}.`);
   }
   return parsed;
+}
+
+function lastMonthKeys(count: number) {
+  const today = new Date();
+  const months: string[] = [];
+
+  for (let index = count - 1; index >= 0; index--) {
+    const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    months.push(`${year}-${month}`);
+  }
+
+  return months;
 }
 
 function getBearerToken(req: Request) {
