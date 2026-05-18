@@ -52,6 +52,7 @@ const openApiSpec = {
     { name: "Sistema" },
     { name: "Transacoes" },
     { name: "Categorias" },
+    { name: "Tags" },
     { name: "Resumo" },
   ],
   paths: {
@@ -162,6 +163,51 @@ const openApiSpec = {
         responses: { "201": { description: "Categoria criada" }, "422": { description: "Dados invalidos" } },
       },
     },
+    "/tags": {
+      get: {
+        tags: ["Tags"],
+        summary: "Lista tags do usuario",
+        responses: { "200": { description: "Lista de tags" } },
+      },
+      post: {
+        tags: ["Tags"],
+        summary: "Cria uma tag",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/TagInput" },
+              examples: {
+                default: { value: { name: "trabalho", color: "#2563eb" } },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Tag criada" }, "422": { description: "Dados invalidos" } },
+      },
+    },
+    "/tags/{id}": {
+      patch: {
+        tags: ["Tags"],
+        summary: "Atualiza uma tag",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TagInput" } } },
+        },
+        responses: { "200": { description: "Tag atualizada" }, "404": { description: "Nao encontrada" } },
+      },
+      delete: {
+        tags: ["Tags"],
+        summary: "Remove uma tag sem transacoes associadas",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "204": { description: "Tag removida" },
+          "404": { description: "Nao encontrada" },
+          "409": { description: "Tag possui transacoes associadas" },
+        },
+      },
+    },
     "/transactions": {
       get: {
         tags: ["Transacoes"],
@@ -249,6 +295,14 @@ const openApiSpec = {
           tag_ids: { type: "array", items: { type: "string", format: "uuid" } },
         },
       },
+      TagInput: {
+        type: "object",
+        required: ["name"],
+        properties: {
+          name: { type: "string", minLength: 1, example: "trabalho" },
+          color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", example: "#2563eb" },
+        },
+      },
     },
   },
 };
@@ -302,6 +356,21 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && pathname === "/categories") {
       return handleCreateCategory(auth, req);
+    }
+
+    if (req.method === "GET" && pathname === "/tags") {
+      return handleListTags(auth);
+    }
+
+    if (req.method === "POST" && pathname === "/tags") {
+      return handleCreateTag(auth, req);
+    }
+
+    const tagMatch = pathname.match(/^\/tags\/([0-9a-f-]{36})$/i);
+    if (tagMatch) {
+      const id = tagMatch[1];
+      if (req.method === "PATCH") return handleUpdateTag(auth, req, id);
+      if (req.method === "DELETE") return handleDeleteTag(auth, id);
     }
 
     if (req.method === "GET" && pathname === "/transactions") {
@@ -595,6 +664,88 @@ async function handleCreateCategory(auth: AuthContext, req: Request): Promise<Re
 
   if (error) throw dbError(error);
   return json({ data }, 201);
+}
+
+async function handleListTags(auth: AuthContext): Promise<Response> {
+  const { data, error } = await auth.client
+    .from("tags")
+    .select("id, name, color, created_at")
+    .eq("user_id", auth.userId)
+    .order("name", { ascending: true });
+
+  if (error) throw dbError(error);
+  return json({ data: data ?? [] });
+}
+
+async function handleCreateTag(auth: AuthContext, req: Request): Promise<Response> {
+  const body = await readJson(req);
+  const name = requireString(body.name, "name");
+  const color = body.color === undefined ? "#3b82f6" : requireHexColor(body.color, "color");
+
+  const { data, error } = await auth.client
+    .from("tags")
+    .insert({ name, color, user_id: auth.userId })
+    .select("id, name, color, created_at")
+    .single();
+
+  if (error) throw dbError(error);
+  return json({ data }, 201);
+}
+
+async function handleUpdateTag(auth: AuthContext, req: Request, id: string): Promise<Response> {
+  const body = await readJson(req);
+  const updates: { name?: string; color?: string } = {};
+
+  if (body.name !== undefined) updates.name = requireString(body.name, "name");
+  if (body.color !== undefined) updates.color = requireHexColor(body.color, "color");
+  if (Object.keys(updates).length === 0) {
+    throw new ApiError(422, "invalid_field", "Informe name ou color para atualizar a tag.");
+  }
+
+  const { data, error } = await auth.client
+    .from("tags")
+    .update(updates)
+    .eq("id", id)
+    .eq("user_id", auth.userId)
+    .select("id, name, color, created_at")
+    .maybeSingle();
+
+  if (error) throw dbError(error);
+  if (!data) throw new ApiError(404, "not_found", "Tag nao encontrada.");
+
+  return json({ data });
+}
+
+async function handleDeleteTag(auth: AuthContext, id: string): Promise<Response> {
+  const { data: tag, error: tagError } = await auth.client
+    .from("tags")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", auth.userId)
+    .maybeSingle();
+
+  if (tagError) throw dbError(tagError);
+  if (!tag) throw new ApiError(404, "not_found", "Tag nao encontrada.");
+
+  const { data: links, error: linksError } = await auth.client
+    .from("transaction_tags")
+    .select("id")
+    .eq("tag_id", id)
+    .limit(1);
+
+  if (linksError) throw dbError(linksError);
+  if (links && links.length > 0) {
+    throw new ApiError(409, "tag_in_use", "Remova esta tag das transacoes antes de exclui-la.");
+  }
+
+  const { error } = await auth.client
+    .from("tags")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", auth.userId);
+
+  if (error) throw dbError(error);
+  return new Response(null, { status: 204, headers: corsHeaders });
 }
 
 async function handleListTransactions(auth: AuthContext, url: URL): Promise<Response> {
@@ -1048,6 +1199,13 @@ function requireStringArray(value: unknown, field: string) {
     throw new ApiError(422, "invalid_field", `${field} deve ser uma lista de textos.`);
   }
   return value.map((item) => item.trim());
+}
+
+function requireHexColor(value: unknown, field: string) {
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+    throw new ApiError(422, "invalid_field", `${field} deve ser uma cor hexadecimal no formato #RRGGBB.`);
+  }
+  return value;
 }
 
 function assertEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T {

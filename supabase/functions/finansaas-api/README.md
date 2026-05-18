@@ -13,6 +13,7 @@ Edge Function para um agente de IA, como um bot do Telegram, consultar e aliment
 - `GET /charts/cashflow`: fluxo de caixa acumulado por dia.
 - `POST /agent/categorize`: sugestao de categoria para um lancamento.
 - `GET /categories` e `POST /categories`.
+- `GET /tags`, `POST /tags`, `PATCH /tags/{id}` e `DELETE /tags/{id}`.
 - `GET /transactions`, `POST /transactions`, `GET/PATCH/DELETE /transactions/{id}`. Ao criar transacao sem `category`, a API tenta categorizar automaticamente.
 
 ## Autenticacao
@@ -84,4 +85,20 @@ Buscar dados para grafico:
 ```bash
 curl 'https://<project-ref>.supabase.co/functions/v1/finansaas-api/charts/monthly-evolution?months=6' \
   -H 'X-Finansaas-Api-Key: fs_token_gerado_na_interface'
+```
+
+Listar tags para aplicar em transacoes:
+
+```bash
+curl 'https://<project-ref>.supabase.co/functions/v1/finansaas-api/tags' \
+  -H 'X-Finansaas-Api-Key: fs_token_gerado_na_interface'
+```
+
+Criar tag:
+
+```bash
+curl -X POST 'https://<project-ref>.supabase.co/functions/v1/finansaas-api/tags' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Finansaas-Api-Key: fs_token_gerado_na_interface' \
+  -d '{"name":"trabalho","color":"#2563eb"}'
 ```
