@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
@@ -32,10 +32,14 @@ export interface Transaction {
 export const useTransactions = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchRequestId = useRef(0);
   const { user } = useAuth();
   const { toast } = useToast();
 
   const fetchTransactions = useCallback(async () => {
+    const requestId = fetchRequestId.current + 1;
+    fetchRequestId.current = requestId;
+
     if (!user) {
       setTransactions([]);
       setLoading(false);
@@ -66,7 +70,9 @@ export const useTransactions = () => {
         tags: transaction.transaction_tags?.map((tt: any) => tt.tag) || []
       }));
       
-      setTransactions(transactionsWithTags as Transaction[]);
+      if (requestId === fetchRequestId.current) {
+        setTransactions(transactionsWithTags as Transaction[]);
+      }
       return transactionsWithTags as Transaction[];
     } catch (error: any) {
       toast({
@@ -76,7 +82,9 @@ export const useTransactions = () => {
       });
       return [] as Transaction[];
     } finally {
-      setLoading(false);
+      if (requestId === fetchRequestId.current) {
+        setLoading(false);
+      }
     }
   }, [user, toast]);
 
