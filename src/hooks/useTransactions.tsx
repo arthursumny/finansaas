@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
@@ -35,8 +35,12 @@ export const useTransactions = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const fetchTransactions = async () => {
-    if (!user) return;
+  const fetchTransactions = useCallback(async () => {
+    if (!user) {
+      setTransactions([]);
+      setLoading(false);
+      return [];
+    }
     
     try {
       const { data, error } = await supabase
@@ -63,16 +67,18 @@ export const useTransactions = () => {
       }));
       
       setTransactions(transactionsWithTags as Transaction[]);
+      return transactionsWithTags as Transaction[];
     } catch (error: any) {
       toast({
         title: "Erro ao carregar transações",
         description: error.message,
         variant: "destructive",
       });
+      return [] as Transaction[];
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, toast]);
 
   const generateRecurringTransactions = (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     const transactions = [];
@@ -277,7 +283,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      await fetchTransactions();
       toast({
         title: "Transação excluída",
         description: "Transação removida com sucesso!",
@@ -306,8 +312,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
 
-      // Remove do estado local
-      setTransactions(prev => prev.filter(t => t.recurrence_group_id !== originalTransaction.recurrence_group_id));
+      await fetchTransactions();
 
       toast({
         title: "Transações recorrentes excluídas",
@@ -403,13 +408,7 @@ export const useTransactions = () => {
         });
       }
 
-      // Atualiza o estado local apenas para transações futuras
-      setTransactions(prev => prev.map(t => {
-        if (t.recurrence_group_id === originalTransaction.recurrence_group_id && t.date >= todayStr) {
-          return { ...t, ...safeUpdates };
-        }
-        return t;
-      }));
+      await fetchTransactions();
 
       const updatedCount = data?.length || 0;
       toast({
@@ -428,7 +427,7 @@ export const useTransactions = () => {
 
   useEffect(() => {
     fetchTransactions();
-  }, [user]);
+  }, [fetchTransactions]);
 
   /**
    * Deleta múltiplas transações por IDs
@@ -445,7 +444,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      await fetchTransactions();
       toast({
         title: "Transações excluídas",
         description: `${ids.length} transações foram removidas.`,
