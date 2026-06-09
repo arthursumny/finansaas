@@ -60,18 +60,50 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## API for AI agents
-
-This repo includes a Supabase Edge Function at `supabase/functions/finansaas-api` for Telegram or other AI agents.
-
-- Swagger UI: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/docs`
-- OpenAPI JSON: `https://<project-ref>.supabase.co/functions/v1/finansaas-api/openapi.json`
-- Tokens por conta: acesse `Dashboard > API`
-- Setup and examples: `supabase/functions/finansaas-api/README.md`
-
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/f80b2f27-caec-46f3-b056-2f50866ff9a7) and click on Share -> Publish.
+### VPS com Docker Compose
+
+Esta branch roda fora da Vercel e sem Supabase. A stack local é:
+
+- `app`: API Node/Express servindo também o build Vite
+- `finansaas-data`: volume Docker com o SQLite em `/data/finansaas.sqlite`
+
+O frontend mantém os hooks existentes, mas `src/integrations/supabase/client.ts` agora é um cliente local que fala com `/api`. Não há GoTrue, PostgREST, RLS ou chaves Supabase no runtime.
+
+```sh
+cp .env.compose.example .env.compose
+docker compose --env-file .env.compose up -d --build
+```
+
+Depois acesse:
+
+```sh
+http://localhost:8096
+```
+
+Para VPS com domínio, ajuste no `.env.compose`:
+
+```sh
+APP_PORT=8096
+```
+
+O app ficará disponível na porta configurada:
+
+```sh
+http://SEU_SERVIDOR:8096
+```
+
+Para backup, copie o arquivo SQLite do volume Docker ou monte `api` em um diretório do host no `docker-compose.yml`.
+
+### Dokploy
+
+No Dokploy, use o `docker-compose.yml` e aponte o domínio para:
+
+- Serviço: `app`
+- Porta interna: `3001`
+
+O Traefik do Dokploy faz o proxy externo e HTTPS. Não precisa Nginx/Caddy no projeto.
 
 ## Can I connect a custom domain to my Lovable project?
 

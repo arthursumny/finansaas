@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    environment:
+      PORT: 3001
+      DATA_DIR: /data
+      DATABASE_PATH: /data/finansaas.sqlite
+      SERVE_STATIC_DIR: /app/dist
+    ports:
+      - "${APP_PORT:-8096}:3001"
+    volumes:
+      - finansaas-data:/data
+    restart: unless-stopped
+
+volumes:
+  finansaas-data:
