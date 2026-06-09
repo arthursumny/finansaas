@@ -273,7 +273,10 @@ const Dashboard = () => {
   };
 
   const previousMonthBalance = calculatePreviousMonthBalance();
-  const monthlyBalance = previousMonthBalance + monthlyNet;
+  const displayedMonthStart = startOfMonth(currentDate);
+  const realCurrentMonthStart = startOfMonth(new Date());
+  const isFutureMonth = displayedMonthStart > realCurrentMonthStart;
+  const monthlyBalance = isFutureMonth ? monthlyNet : previousMonthBalance + monthlyNet;
 
   // Calcular saldo atual considerando apenas lançamentos confirmados até o mês exibido
   const calculateCurrentBalance = () => {
