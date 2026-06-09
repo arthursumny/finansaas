@@ -49,12 +49,26 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
     return format(new Date(date + 'T00:00:00'), "dd/MM/yyyy", { locale: ptBR });
   };
 
-  // Filtrar transações do mês atual
+  const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+  const previousMonthBalance = transactions
+    .filter(transaction => (
+      transaction.status === 'paid' &&
+      new Date(transaction.date + 'T00:00:00') < monthStart
+    ))
+    .reduce((sum, transaction) => (
+      transaction.type === 'income'
+        ? sum + transaction.amount
+        : sum - transaction.amount
+    ), 0);
+
+  const monthlyNet = monthlyIncome - monthlyExpenses;
+
+  // Filtrar todas as transações lançadas no mês atual
   const currentMonthTransactions = transactions.filter(transaction => {
     const transactionDate = new Date(transaction.date + 'T00:00:00');
-    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-    return transactionDate >= monthStart && transactionDate <= monthEnd && transaction.status === 'paid';
+    return transactionDate >= monthStart && transactionDate <= monthEnd;
   });
 
   // Calcular breakdown por categoria
@@ -83,7 +97,7 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
   const incomeBreakdown = getBreakdownByCategory(currentMonthTransactions, 'income');
   const expenseBreakdown = getBreakdownByCategory(currentMonthTransactions, 'expense');
 
-  // Para saldo acumulado, calcular histórico mensal
+  // Para saldo atual, calcular histórico mensal com transações confirmadas
   const getMonthlyHistory = () => {
     const allPaidTransactions = transactions.filter(t => t.status === "paid");
     
@@ -107,12 +121,12 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
       return acc;
     }, {} as Record<string, { income: number; expenses: number; transactions: Transaction[] }>);
     
-    // Ordenar meses e calcular saldo acumulado progressivo
+    // Ordenar meses e calcular saldo atual progressivo
     const sortedMonths = Object.keys(transactionsByMonth).sort();
     const currentMonthKey = format(currentDate, "yyyy-MM");
     let accumulatedBalance = 0;
     
-    return sortedMonths.map(monthKey => {
+    return sortedMonths.filter(monthKey => monthKey <= currentMonthKey).map(monthKey => {
       const monthData = transactionsByMonth[monthKey];
       const monthBalance = monthData.income - monthData.expenses;
       accumulatedBalance += monthBalance;
@@ -137,7 +151,7 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="w-5 h-5" />
-            {type === 'monthly' ? 'Detalhamento do Balanço do Mês' : 'Detalhamento do Saldo Acumulado'}
+            {type === 'monthly' ? 'Detalhamento do Balanço do Mês' : 'Detalhamento do Saldo Atual'}
           </DialogTitle>
         </DialogHeader>
 
@@ -147,21 +161,21 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                {type === 'monthly' ? 'Resumo do Mês' : 'Resumo Acumulado'}
+                {type === 'monthly' ? 'Resumo do Mês' : 'Resumo do Saldo Atual'}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                   <TrendingUp className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                  <div className="text-sm text-muted-foreground">Receitas</div>
+                  <div className="text-sm text-muted-foreground">Receitas do Mês</div>
                   <div className="text-lg font-semibold text-green-600">
                     {formatCurrency(monthlyIncome)}
                   </div>
                 </div>
                 <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
                   <TrendingDown className="w-6 h-6 text-red-600 mx-auto mb-2" />
-                  <div className="text-sm text-muted-foreground">Despesas</div>
+                  <div className="text-sm text-muted-foreground">Despesas do Mês</div>
                   <div className="text-lg font-semibold text-red-600">
                     {formatCurrency(monthlyExpenses)}
                   </div>
@@ -169,7 +183,7 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
                 <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <DollarSign className="w-6 h-6 text-blue-600 mx-auto mb-2" />
                   <div className="text-sm text-muted-foreground">
-                    {type === 'monthly' ? 'Balanço do Mês' : 'Saldo Acumulado'}
+                    {type === 'monthly' ? 'Balanço do Mês' : 'Saldo Atual'}
                   </div>
                   <div className={`text-lg font-semibold ${(type === 'monthly' ? monthlyBalance : accumulatedBalance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(type === 'monthly' ? monthlyBalance : accumulatedBalance)}
@@ -181,6 +195,37 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
 
           {type === 'monthly' ? (
             <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Composição do Balanço
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="text-muted-foreground">Saldo do Mês Anterior</div>
+                      <div className={`font-semibold ${previousMonthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(previousMonthBalance)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Receitas - Despesas</div>
+                      <div className={`font-semibold ${monthlyNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(monthlyNet)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Balanço do Mês</div>
+                      <div className={`font-semibold ${monthlyBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(monthlyBalance)}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Breakdown de Receitas */}
               {incomeBreakdown.length > 0 && (
                 <Card>
@@ -278,7 +323,7 @@ const BalanceDetailModal: React.FC<BalanceDetailModalProps> = ({
               </Card>
             </>
           ) : (
-            /* Histórico Mensal para Saldo Acumulado */
+            /* Histórico mensal para saldo atual */
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

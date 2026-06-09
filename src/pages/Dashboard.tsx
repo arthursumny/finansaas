@@ -241,58 +241,58 @@ const Dashboard = () => {
         return transactionDate >= monthStart && transactionDate <= monthEnd;
       });
 
+  const currentMonthSummaryTransactions = transactions.filter(transaction => {
+    const transactionDate = parseLocalDate(transaction.date);
+    return transactionDate >= monthStart && transactionDate <= monthEnd;
+  });
+
   // Calcular totais do mês (TODAS as transações do mês, pagas e pendentes)
-  const monthlyIncome = currentMonthTransactions
+  const monthlyIncome = currentMonthSummaryTransactions
     .filter(t => t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const monthlyExpenses = currentMonthTransactions
+  const monthlyExpenses = currentMonthSummaryTransactions
     .filter(t => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const monthlyBalance = monthlyIncome - monthlyExpenses;
+  const monthlyNet = monthlyIncome - monthlyExpenses;
 
-  // Calcular saldo acumulado progressivo mês a mês
-  const calculateAccumulatedBalance = () => {
-    const allPaidTransactions = transactions.filter(t => t.status === "paid");
-    
-    // Agrupar transações por mês/ano
-    const transactionsByMonth = allPaidTransactions.reduce((acc, transaction) => {
-      const transactionDate = parseLocalDate(transaction.date);
-      const monthKey = format(transactionDate, "yyyy-MM");
-      
-      if (!acc[monthKey]) {
-        acc[monthKey] = { income: 0, expenses: 0 };
-      }
-      
-      if (transaction.type === "income") {
-        acc[monthKey].income += transaction.amount;
-      } else {
-        acc[monthKey].expenses += transaction.amount;
-      }
-      
-      return acc;
-    }, {} as Record<string, { income: number; expenses: number }>);
-    
-    // Ordenar meses e calcular saldo acumulado progressivo
-    const sortedMonths = Object.keys(transactionsByMonth).sort();
-    const currentMonthKey = format(currentDate, "yyyy-MM");
-    let accumulatedBalance = 0;
-    
-    for (const monthKey of sortedMonths) {
-      const monthBalance = transactionsByMonth[monthKey].income - transactionsByMonth[monthKey].expenses;
-      accumulatedBalance += monthBalance;
-      
-      // Parar no mês atual (incluindo o mês atual)
-      if (monthKey === currentMonthKey) {
-        break;
-      }
-    }
-    
-    return accumulatedBalance;
+  const calculatePreviousMonthBalance = () => {
+    const currentMonthStart = startOfMonth(currentDate);
+
+    return transactions
+      .filter(transaction => {
+        const transactionDate = parseLocalDate(transaction.date);
+        return transaction.status === "paid" && transactionDate < currentMonthStart;
+      })
+      .reduce((sum, transaction) => (
+        transaction.type === "income"
+          ? sum + transaction.amount
+          : sum - transaction.amount
+      ), 0);
   };
 
-  const accumulatedBalance = calculateAccumulatedBalance();
+  const previousMonthBalance = calculatePreviousMonthBalance();
+  const monthlyBalance = previousMonthBalance + monthlyNet;
+
+  // Calcular saldo atual considerando apenas lançamentos confirmados até o mês exibido
+  const calculateCurrentBalance = () => {
+    const allPaidTransactions = transactions.filter(t => t.status === "paid");
+    const balanceEndDate = endOfMonth(currentDate);
+
+    return allPaidTransactions
+      .filter(transaction => {
+        const transactionDate = parseLocalDate(transaction.date);
+        return transactionDate <= balanceEndDate;
+      })
+      .reduce((sum, transaction) => (
+        transaction.type === "income"
+          ? sum + transaction.amount
+          : sum - transaction.amount
+      ), 0);
+  };
+
+  const accumulatedBalance = calculateCurrentBalance();
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate(prev => 
@@ -692,7 +692,7 @@ const Dashboard = () => {
 
           <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Saldo Acumulado</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Saldo Atual</CardTitle>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
