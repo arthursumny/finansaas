@@ -55,6 +55,10 @@ import RecurringUpdateModal from "@/components/RecurringUpdateModal";
 import { ImportModal } from "@/components/ImportModal";
 import BalanceDetailModal from "@/components/BalanceDetailModal";
 
+type TransactionFormData = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'tags'> & {
+  tag_ids?: string[];
+};
+
 const Dashboard = () => {
   const { theme } = useTheme();
   const actualTheme = theme === 'system' ? 
@@ -74,7 +78,7 @@ const Dashboard = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [recurringUpdateModal, setRecurringUpdateModal] = useState<{
     isOpen: boolean;
-    transactionData?: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
+    transactionData?: TransactionFormData;
     fieldName?: string;
   }>({ isOpen: false });
   const [balanceDetailModal, setBalanceDetailModal] = useState<{
@@ -113,7 +117,6 @@ const Dashboard = () => {
     isFiltersOpen,
     hasActiveFilters,
     activeFiltersCount,
-    filteredStats,
     updateFilters,
     clearFilters,
     toggleFilters
@@ -123,12 +126,22 @@ const Dashboard = () => {
     await signOut();
   };
 
-  const handleAddTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  const handleAddTransaction = async (transactionData: TransactionFormData) => {
     await addTransaction(transactionData);
     setShowTransactionForm(false);
   };
 
-  const handleEditTransaction = async (transactionData: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  const haveSameTagIds = (currentTags: Transaction['tags'] = [], nextTagIds: string[] = []) => {
+    const currentTagIds = currentTags.map(tag => tag.id).sort();
+    const sortedNextTagIds = [...nextTagIds].sort();
+
+    return (
+      currentTagIds.length === sortedNextTagIds.length &&
+      currentTagIds.every((tagId, index) => tagId === sortedNextTagIds[index])
+    );
+  };
+
+  const handleEditTransaction = async (transactionData: TransactionFormData) => {
     if (editingTransaction) {
       console.log('Editando transação:', {
         editingTransaction,
@@ -158,6 +171,9 @@ const Dashboard = () => {
          }
          if (editingTransaction.status !== transactionData.status) {
            changedFields.push('o status');
+         }
+         if (!haveSameTagIds(editingTransaction.tags, transactionData.tag_ids)) {
+           changedFields.push('as tags');
          }
         
         console.log('Campos alterados:', changedFields);
@@ -190,12 +206,15 @@ const Dashboard = () => {
       console.log('Confirmando atualização de todas as transações recorrentes');
       const old = editingTransaction;
       const newData = recurringUpdateModal.transactionData;
-      const updates: Partial<Transaction> = {};
+      const updates: Partial<Transaction> & { tag_ids?: string[] } = {};
       const groupFields: Array<keyof Pick<Transaction, 'type' | 'description' | 'amount' | 'category' | 'status'>> = ['type', 'description', 'amount', 'category', 'status'];
       for (const field of groupFields) {
         if (newData[field] !== old[field]) {
           updates[field] = newData[field];
         }
+      }
+      if (!haveSameTagIds(old.tags, newData.tag_ids)) {
+        updates.tag_ids = newData.tag_ids || [];
       }
       const dateChanged = newData.date !== old.date;
       await updateAllRecurringTransactions(editingTransaction, updates);
@@ -245,6 +264,26 @@ const Dashboard = () => {
     const transactionDate = parseLocalDate(transaction.date);
     return transactionDate >= monthStart && transactionDate <= monthEnd;
   });
+
+  const selectedTagIds = filters.tagIds || [];
+  const selectedTags = transactions
+    .flatMap(transaction => transaction.tags || [])
+    .filter((tag, index, allTags) => (
+      selectedTagIds.includes(tag.id) &&
+      allTags.findIndex(item => item.id === tag.id) === index
+    ));
+  const tagFilterSummary = currentMonthTransactions.reduce(
+    (summary, transaction) => {
+      if (transaction.type === "income") {
+        summary.income += transaction.amount;
+      } else {
+        summary.expenses += transaction.amount;
+      }
+      return summary;
+    },
+    { income: 0, expenses: 0 }
+  );
+  const tagFilterBalance = tagFilterSummary.income - tagFilterSummary.expenses;
 
   // Calcular totais do mês (TODAS as transações do mês, pagas e pendentes)
   const monthlyIncome = currentMonthSummaryTransactions
@@ -570,6 +609,18 @@ const Dashboard = () => {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setShowTagManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Gerenciar tags"
+                  >
+                    <Tag className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Tags</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowSubscriptionManager(true)}
                     className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
                     title="Assinaturas mensais"
@@ -813,7 +864,67 @@ const Dashboard = () => {
           transactions={transactions}
         />
 
-
+        {selectedTagIds.length > 0 && (
+          <Card className="border-0 shadow-sm bg-card">
+            <CardHeader className="pb-3 px-4 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-base sm:text-lg font-medium text-foreground flex items-center gap-2">
+                    <Tag className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    {selectedTagIds.length === 1 ? "Total da Tag" : "Total das Tags"}
+                  </CardTitle>
+                  <CardDescription className="mt-2 flex flex-wrap gap-2">
+                    {selectedTags.length > 0 ? (
+                      selectedTags.map(tag => (
+                        <Badge
+                          key={tag.id}
+                          variant="outline"
+                          style={{
+                            backgroundColor: tag.color + '15',
+                            borderColor: tag.color + '40',
+                            color: tag.color
+                          }}
+                        >
+                          {tag.name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span>{selectedTagIds.length} tag{selectedTagIds.length > 1 ? "s" : ""} selecionada{selectedTagIds.length > 1 ? "s" : ""}</span>
+                    )}
+                  </CardDescription>
+                </div>
+                <div className="text-left sm:text-right">
+                  <div className={`text-2xl font-semibold ${tagFilterBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                    {formatCurrency(tagFilterBalance)}
+                  </div>
+                  <p className="text-xs text-secondary">
+                    {currentMonthTransactions.length} {currentMonthTransactions.length === 1 ? "transação" : "transações"} no filtro atual
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6 pb-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-primary/10 p-3">
+                  <p className="text-xs font-medium text-secondary">
+                    Receitas com {selectedTagIds.length === 1 ? "a tag" : "as tags"}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-primary">
+                    {formatCurrency(tagFilterSummary.income)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-destructive/10 p-3">
+                  <p className="text-xs font-medium text-secondary">
+                    Despesas com {selectedTagIds.length === 1 ? "a tag" : "as tags"}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-destructive">
+                    {formatCurrency(tagFilterSummary.expenses)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Lista de Transações */}
         <Card className="border-0 shadow-sm bg-card">

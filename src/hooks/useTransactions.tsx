@@ -339,13 +339,14 @@ export const useTransactions = () => {
    * Atualiza todas as transações de um grupo recorrente
    * IMPORTANTE: Esta função APENAS atualiza transações existentes, NUNCA cria novas
    */
-  const updateAllRecurringTransactions = async (originalTransaction: Transaction, updates: Partial<Transaction>) => {
+  const updateAllRecurringTransactions = async (originalTransaction: Transaction, updates: Partial<Transaction> & { tag_ids?: string[] }) => {
     if (!user || !originalTransaction.recurrence_group_id) {
       // Se não for recorrente, atualiza apenas a transação individual
       return updateTransaction(originalTransaction.id, updates);
     }
 
     try {
+      const { tag_ids, ...transactionUpdates } = updates;
       // Data atual para comparação
       const today = new Date();
       const todayStr = format(today, 'yyyy-MM-dd');
@@ -353,11 +354,12 @@ export const useTransactions = () => {
       console.log('Atualizando transações recorrentes:', {
         recurrence_group_id: originalTransaction.recurrence_group_id,
         todayStr,
-        updates
+        updates: transactionUpdates,
+        tag_ids
       });
       
       // VALIDAÇÃO CRÍTICA: Remove campos que poderiam causar criação de novas transações
-      const safeUpdates = { ...updates };
+      const safeUpdates = { ...transactionUpdates };
       delete safeUpdates.is_recurring;
       delete safeUpdates.recurrence_type;
       delete safeUpdates.recurrence_count;
@@ -390,20 +392,53 @@ export const useTransactions = () => {
         return;
       }
       
-      // Atualiza apenas as transações futuras (incluindo a atual) com o mesmo recurrence_group_id
-      const { data, error } = await supabase
-        .from('transactions')
-        .update(safeUpdates)
-        .match({ 
-          user_id: user.id,
-          recurrence_group_id: originalTransaction.recurrence_group_id 
-        })
-        .gte('date', todayStr) // Apenas transações de hoje em diante
-        .select();
+      let data = transactionsToUpdate;
+      const hasTransactionUpdates = Object.keys(safeUpdates).length > 0;
 
-      if (error) {
-        console.error('Erro ao atualizar transações:', error);
-        throw error;
+      if (hasTransactionUpdates) {
+        // Atualiza apenas as transações futuras (incluindo a atual) com o mesmo recurrence_group_id
+        const { data: updatedTransactions, error } = await supabase
+          .from('transactions')
+          .update(safeUpdates)
+          .match({ 
+            user_id: user.id,
+            recurrence_group_id: originalTransaction.recurrence_group_id 
+          })
+          .gte('date', todayStr) // Apenas transações de hoje em diante
+          .select();
+
+        if (error) {
+          console.error('Erro ao atualizar transações:', error);
+          throw error;
+        }
+
+        data = updatedTransactions;
+      }
+
+      const updatedTransactionIds = (data || []).map(transaction => transaction.id);
+
+      if (tag_ids !== undefined && updatedTransactionIds.length > 0) {
+        const { error: deleteTagsError } = await supabase
+          .from('transaction_tags')
+          .delete()
+          .in('transaction_id', updatedTransactionIds);
+
+        if (deleteTagsError) throw deleteTagsError;
+
+        if (tag_ids.length > 0) {
+          const tagRelations = updatedTransactionIds.flatMap(transactionId =>
+            tag_ids.map(tagId => ({
+              transaction_id: transactionId,
+              tag_id: tagId
+            }))
+          );
+
+          const { error: insertTagsError } = await supabase
+            .from('transaction_tags')
+            .insert(tagRelations);
+
+          if (insertTagsError) throw insertTagsError;
+        }
       }
       
       console.log('Transações atualizadas:', data);
