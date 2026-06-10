@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import Database from "better-sqlite3";
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -47,6 +47,10 @@ function verifyPassword(password, storedHash) {
   const candidate = scryptSync(password, salt, 64);
   const expected = Buffer.from(hash, "hex");
   return expected.length === candidate.length && timingSafeEqual(expected, candidate);
+}
+
+function hashApiToken(token) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function normalizeValue(value) {
@@ -255,6 +259,27 @@ function toPublicUser(user) {
 }
 
 function requireUser(req, res, next) {
+  const apiKey = req.get("x-finansaas-api-key");
+  if (apiKey) {
+    const tokenHash = hashApiToken(apiKey);
+    const token = db.prepare(`
+      SELECT api_tokens.id as api_token_id, users.*
+      FROM api_tokens
+      JOIN users ON users.id = api_tokens.user_id
+      WHERE api_tokens.token_hash = ?
+        AND api_tokens.revoked_at IS NULL
+    `).get(tokenHash);
+
+    if (!token) {
+      return res.status(401).json({ error: { message: "API key inválida ou revogada." } });
+    }
+
+    db.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?").run(now(), token.api_token_id);
+    req.user = token;
+    req.authMode = "api-key";
+    return next();
+  }
+
   const auth = req.get("authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return res.status(401).json({ error: { message: "Sessão ausente." } });

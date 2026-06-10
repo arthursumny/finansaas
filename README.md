@@ -96,6 +96,16 @@ http://SEU_SERVIDOR:8096
 
 Para backup, copie o arquivo SQLite do volume Docker ou monte `api` em um diretório do host no `docker-compose.yml`.
 
+### API Keys
+
+Os tokens gerados em `Dashboard > API` ficam no SQLite, com hash SHA-256. Para integrações externas, envie o token no header:
+
+```sh
+X-Finansaas-Api-Key: fs_token_gerado_na_interface
+```
+
+A API local aceita esse header nos endpoints `/api/*` que exigem autenticação e atualiza `last_used_at` quando a chave é usada. Chaves revogadas deixam de autenticar.
+
 ### Dokploy
 
 No Dokploy, use o `docker-compose.yml` e aponte o domínio para:
