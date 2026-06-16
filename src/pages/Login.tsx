@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,14 +89,6 @@ const Login = () => {
                 : 'Digite suas credenciais para acessar sua conta'
               }
             </CardDescription>
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/30">
-                Free: até 20 entradas/saídas por mês
-              </Badge>
-              <Badge className="bg-emerald-500/20 text-emerald-50 border-emerald-400/30">
-                Finan Pro R$ 9,90/mês: ilimitado + metas e orçamentos
-              </Badge>
-            </div>
           </CardHeader>
           <CardContent>
             <Tabs value={isSignUp ? "signup" : "signin"} onValueChange={(value) => setIsSignUp(value === "signup")}>
