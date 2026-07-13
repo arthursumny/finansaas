@@ -106,6 +106,16 @@ X-Finansaas-Api-Key: fs_token_gerado_na_interface
 
 A API local aceita esse header nos endpoints `/api/*` que exigem autenticação e atualiza `last_used_at` quando a chave é usada. Chaves revogadas deixam de autenticar.
 
+Rotas públicas para agentes:
+
+- `GET /api/docs` e `GET /api/openapi.json`
+- `GET /api/summary` e `GET /api/charts/*`
+- `GET/POST /api/categories`
+- `GET/POST /api/tags` e `PATCH/DELETE /api/tags/:id`
+- `GET/POST /api/transactions` e `GET/PATCH/DELETE /api/transactions/:id`
+
+O endpoint `/api/query` é exclusivo do frontend autenticado por sessão e rejeita API keys. Consulte `docs/LLM_API_MANUAL.md` para o contrato de integração e as regras de segurança.
+
 ### Dokploy
 
 No Dokploy, use o `docker-compose.yml` e aponte o domínio para:

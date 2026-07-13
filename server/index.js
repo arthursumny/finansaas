@@ -5,6 +5,7 @@ import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
+import { createPublicApiRouter } from "./public-api.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.DATA_DIR || `${__dirname}/../data`;
@@ -29,6 +30,19 @@ const userScopedTables = new Set([
   "subscriptions",
   "tags",
   "transactions",
+]);
+
+const clientTables = new Set([
+  "api_tokens",
+  "budgets",
+  "categories",
+  "goals",
+  "profiles",
+  "subscriptions",
+  "subscription_tags",
+  "tags",
+  "transactions",
+  "transaction_tags",
 ]);
 
 const tableColumns = new Map();
@@ -263,7 +277,7 @@ function requireUser(req, res, next) {
   if (apiKey) {
     const tokenHash = hashApiToken(apiKey);
     const token = db.prepare(`
-      SELECT api_tokens.id as api_token_id, users.*
+      SELECT api_tokens.id as api_token_id, api_tokens.scopes, users.*
       FROM api_tokens
       JOIN users ON users.id = api_tokens.user_id
       WHERE api_tokens.token_hash = ?
@@ -277,6 +291,7 @@ function requireUser(req, res, next) {
     db.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?").run(now(), token.api_token_id);
     req.user = token;
     req.authMode = "api-key";
+    req.scopes = hydrateRow(token).scopes;
     return next();
   }
 
@@ -296,6 +311,15 @@ function requireUser(req, res, next) {
   }
 
   req.user = session;
+  req.authMode = "session";
+  req.scopes = ["*"];
+  next();
+}
+
+function requireSession(req, res, next) {
+  if (req.authMode !== "session") {
+    return res.status(403).json({ error: { code: "forbidden", message: "API keys não podem usar /api/query." } });
+  }
   next();
 }
 
@@ -318,6 +342,15 @@ function buildWhere(table, filters, params, user) {
 
   if (userScopedTables.has(table) && columns.has("user_id")) {
     clauses.push('"user_id" = ?');
+    params.push(user.id);
+  } else if (table === "profiles") {
+    clauses.push('"id" = ?');
+    params.push(user.id);
+  } else if (table === "transaction_tags") {
+    clauses.push('EXISTS (SELECT 1 FROM transactions WHERE transactions.id = transaction_tags.transaction_id AND transactions.user_id = ?)');
+    params.push(user.id);
+  } else if (table === "subscription_tags") {
+    clauses.push('EXISTS (SELECT 1 FROM subscriptions WHERE subscriptions.id = subscription_tags.subscription_id AND subscriptions.user_id = ?)');
     params.push(user.id);
   }
 
@@ -370,7 +403,21 @@ function pickWritable(table, item, mode) {
   return row;
 }
 
-function insertRows(table, values, options = {}) {
+function assertOwnedRelation(table, row, user) {
+  if (table === "transaction_tags") {
+    const transaction = db.prepare("SELECT 1 FROM transactions WHERE id = ? AND user_id = ?").get(row.transaction_id, user.id);
+    const tag = db.prepare("SELECT 1 FROM tags WHERE id = ? AND user_id = ?").get(row.tag_id, user.id);
+    if (!transaction || !tag) throw new Error("Transação ou tag inválida para este usuário.");
+  }
+
+  if (table === "subscription_tags") {
+    const subscription = db.prepare("SELECT 1 FROM subscriptions WHERE id = ? AND user_id = ?").get(row.subscription_id, user.id);
+    const tag = db.prepare("SELECT 1 FROM tags WHERE id = ? AND user_id = ?").get(row.tag_id, user.id);
+    if (!subscription || !tag) throw new Error("Assinatura ou tag inválida para este usuário.");
+  }
+}
+
+function insertRows(table, values, options = {}, user) {
   const rows = Array.isArray(values) ? values : [values];
   const inserted = [];
   const columns = tableColumns.get(table);
@@ -378,6 +425,9 @@ function insertRows(table, values, options = {}) {
   const transaction = db.transaction(() => {
     for (const value of rows) {
       const row = pickWritable(table, value, "insert");
+      if (columns.has("user_id")) row.user_id = user.id;
+      if (table === "profiles") row.id = user.id;
+      assertOwnedRelation(table, row, user);
       const keys = Object.keys(row).filter((key) => columns.has(key));
       const placeholders = keys.map(() => "?").join(", ");
       const conflict = options.ignoreDuplicates ? " OR IGNORE" : "";
@@ -479,6 +529,8 @@ initSchema();
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+app.use("/api", createPublicApiRouter({ db, requireUser, now, randomUUID, hydrateRow }));
+
 app.post("/api/auth/signup", (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
@@ -516,23 +568,23 @@ app.post("/api/auth/signin", (req, res) => {
   res.json({ session: createSession(user), user: toPublicUser(user) });
 });
 
-app.get("/api/auth/session", requireUser, (req, res) => {
+app.get("/api/auth/session", requireUser, requireSession, (req, res) => {
   res.json({ session: createSession(req.user), user: toPublicUser(req.user) });
 });
 
-app.post("/api/auth/signout", requireUser, (req, res) => {
+app.post("/api/auth/signout", requireUser, requireSession, (req, res) => {
   db.prepare("DELETE FROM sessions WHERE token = ?").run(req.get("authorization").replace(/^Bearer\s+/i, ""));
   res.json({ ok: true });
 });
 
-app.post("/api/query", requireUser, (req, res) => {
+app.post("/api/query", requireUser, requireSession, (req, res) => {
   try {
     const { table, action, values, filters = [], orders = [], select = "", single = false, maybeSingle = false, limit, options = {} } = req.body;
-    if (!tableColumns.has(table)) return res.status(400).json({ error: { message: `Tabela inválida: ${table}` } });
+    if (!clientTables.has(table)) return res.status(400).json({ error: { message: `Tabela inválida: ${table}` } });
 
     let data;
     if (action === "select") data = selectRows(table, { filters, orders, select, limit }, req.user);
-    else if (action === "insert") data = withRelations(table, insertRows(table, values, options), select);
+    else if (action === "insert") data = withRelations(table, insertRows(table, values, options, req.user), select);
     else if (action === "update") data = updateRows(table, values, filters, req.user);
     else if (action === "delete") data = deleteRows(table, filters, req.user);
     else return res.status(400).json({ error: { message: `Ação inválida: ${action}` } });
@@ -545,6 +597,17 @@ app.post("/api/query", requireUser, (req, res) => {
   }
 });
 
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: { code: "not_found", message: "Rota não encontrada." } });
+});
+
+app.use((error, _req, res, next) => {
+  if (error instanceof SyntaxError && "body" in error) {
+    return res.status(400).json({ error: { code: "invalid_json", message: "O corpo JSON é inválido." } });
+  }
+  next(error);
+});
+
 const staticDir = process.env.SERVE_STATIC_DIR;
 if (staticDir && fs.existsSync(staticDir)) {
   app.use(express.static(staticDir));
@@ -555,6 +618,15 @@ if (staticDir && fs.existsSync(staticDir)) {
 }
 
 const port = Number(process.env.PORT || 3001);
-app.listen(port, "0.0.0.0", () => {
-  console.log(`FinanSaaS API listening on ${port}`);
-});
+
+export function startServer(listenPort = port) {
+  return app.listen(listenPort, "0.0.0.0", () => {
+    console.log(`FinanSaaS API listening on ${listenPort}`);
+  });
+}
+
+export { app, db };
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  startServer();
+}
