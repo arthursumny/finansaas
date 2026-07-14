@@ -105,6 +105,14 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   const docs = await request("/openapi.json");
   assert.equal(docs.response.status, 200);
   assert.equal(docs.body.servers[0].url, "/api");
+  assert.ok(docs.body.paths["/monthly-report"]);
+
+  const previousIncome = await request("/transactions", {
+    method: "POST",
+    headers: apiHeaders,
+    body: JSON.stringify({ type: "income", description: "Salário anterior", amount: 100, date: "2026-06-30", status: "paid" }),
+  });
+  assert.equal(previousIncome.response.status, 201);
 
   const categories = await request("/categories?type=expense", { headers: apiHeaders });
   assert.equal(categories.response.status, 200);
@@ -168,7 +176,7 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   const summary = await request("/summary?status=paid", { headers: apiHeaders });
   assert.equal(summary.response.status, 200);
   assert.equal(summary.body.expenses, 42.5);
-  assert.equal(summary.body.balance, -42.5);
+  assert.equal(summary.body.balance, 57.5);
 
   const monthly = await request("/charts/monthly-evolution?months=2&status=paid", { headers: apiHeaders });
   assert.equal(monthly.response.status, 200);
@@ -181,7 +189,19 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
 
   const cashflow = await request("/charts/cashflow?status=paid", { headers: apiHeaders });
   assert.equal(cashflow.response.status, 200);
-  assert.equal(cashflow.body.data[0].cumulative_balance, -42.5);
+  assert.equal(cashflow.body.data.at(-1).cumulative_balance, 57.5);
+
+  const monthlyReport = await request("/monthly-report?month=2026-07", { headers: apiHeaders });
+  assert.equal(monthlyReport.response.status, 200);
+  assert.deepEqual(monthlyReport.body.period, { from: "2026-07-01", to: "2026-07-31" });
+  assert.equal(monthlyReport.body.income, 0);
+  assert.equal(monthlyReport.body.expenses, 42.5);
+  assert.equal(monthlyReport.body.net, -42.5);
+  assert.equal(monthlyReport.body.opening_balance, 100);
+  assert.equal(monthlyReport.body.monthly_balance, 57.5);
+  assert.equal(monthlyReport.body.current_balance, 57.5);
+  assert.equal(monthlyReport.body.transaction_count, 1);
+  assert.equal(monthlyReport.body.expenses_by_category[0].category, "Alimentação");
 
   const updated = await request(`/transactions/${transactionId}`, {
     method: "PATCH",

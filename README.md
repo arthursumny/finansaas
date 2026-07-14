@@ -109,7 +109,7 @@ A API local aceita esse header nos endpoints `/api/*` que exigem autenticação 
 Rotas públicas para agentes:
 
 - `GET /api/docs` e `GET /api/openapi.json`
-- `GET /api/summary` e `GET /api/charts/*`
+- `GET /api/monthly-report`, `GET /api/summary` e `GET /api/charts/*`
 - `GET/POST /api/categories`
 - `GET/POST /api/tags` e `PATCH/DELETE /api/tags/:id`
 - `GET/POST /api/transactions` e `GET/PATCH/DELETE /api/transactions/:id`

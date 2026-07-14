@@ -40,6 +40,9 @@ const OPENAPI_SPEC = {
   paths: {
     "/health": { get: { tags: ["Sistema"], security: [], summary: "Verifica disponibilidade da API", responses: { 200: { description: "API operacional" } } } },
     "/summary": { get: { tags: ["Resumo"], summary: "Saldo e totais por período", parameters: transactionPeriodParameters(), responses: { 200: { description: "Resumo financeiro" } } } },
+    "/monthly-report": { get: { tags: ["Resumo"], summary: "Relatório mensal completo com as mesmas regras do dashboard", parameters: [
+      { name: "month", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$", example: "2026-07" } },
+    ], responses: { 200: { description: "Receitas, despesas, saldos, status e categorias do mês" } } } },
     "/charts/monthly-evolution": { get: { tags: ["Resumo"], summary: "Evolução mensal", parameters: [
       { name: "months", in: "query", schema: { type: "integer", minimum: 1, maximum: 36, default: 6 } },
       statusParameter(),
@@ -208,6 +211,45 @@ export function createPublicApiRouter({ db, requireUser, now, randomUUID, hydrat
       pending: money(pending),
       count: rows.length,
       by_category: byCategory,
+    });
+  }));
+
+  router.get("/monthly-report", ...protectedRoute("charts:read", (req, res) => {
+    const { month, start, end } = requiredMonth(req.query.month);
+    const rows = db.prepare(`
+      SELECT type, amount, status, category
+      FROM transactions
+      WHERE user_id = ? AND date >= ? AND date <= ?
+    `).all(req.user.id, start, end);
+    const all = summarizeTransactions(rows);
+    const paid = summarizeTransactions(rows.filter((row) => row.status === "paid"));
+    const pending = summarizeTransactions(rows.filter((row) => row.status === "pending"));
+    const openingBalance = paidBalance(db, req.user.id, "date < ?", start);
+    const currentBalance = paidBalance(db, req.user.id, "date <= ?", end);
+    const expenseCategories = new Map();
+
+    for (const row of rows.filter((item) => item.type === "expense")) {
+      const current = expenseCategories.get(row.category) || { category: row.category, amount: 0, count: 0 };
+      current.amount += Number(row.amount);
+      current.count += 1;
+      expenseCategories.set(row.category, current);
+    }
+
+    res.json({
+      month,
+      period: { from: start, to: end },
+      income: all.income,
+      expenses: all.expenses,
+      net: all.net,
+      opening_balance: openingBalance,
+      monthly_balance: money(openingBalance + all.net),
+      current_balance: currentBalance,
+      transaction_count: all.count,
+      paid,
+      pending,
+      expenses_by_category: [...expenseCategories.values()]
+        .map((item) => ({ ...item, amount: money(item.amount) }))
+        .sort((a, b) => b.amount - a.amount),
     });
   }));
 
@@ -429,6 +471,34 @@ function transactionFilterSql(userId, query) {
   if (status) { clauses.push("status = ?"); params.push(status); }
   if (category) { clauses.push("category = ?"); params.push(category); }
   return { where: ` WHERE ${clauses.join(" AND ")}`, params };
+}
+
+function requiredMonth(value) {
+  if (typeof value !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+    throw new ApiError(422, "invalid_field", "month deve usar AAAA-MM.");
+  }
+  const [year, monthNumber] = value.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return {
+    month: value,
+    start: `${value}-01`,
+    end: `${value}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+function summarizeTransactions(rows) {
+  const income = sum(rows.filter((row) => row.type === "income").map((row) => row.amount));
+  const expenses = sum(rows.filter((row) => row.type === "expense").map((row) => row.amount));
+  return { income: money(income), expenses: money(expenses), net: money(income - expenses), count: rows.length };
+}
+
+function paidBalance(db, userId, dateClause, date) {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS balance
+    FROM transactions
+    WHERE user_id = ? AND status = 'paid' AND ${dateClause}
+  `).get(userId, date);
+  return money(row.balance);
 }
 
 function validateTransaction(body, requireAll) {

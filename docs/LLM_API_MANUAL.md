@@ -73,6 +73,43 @@ ausente, inválida ou revogada. Resposta `403` significa que falta o escopo exig
 
 `GET /health` — público, não exige chave.
 
+### Relatório mensal para o LLM
+
+`GET /monthly-report?month=AAAA-MM`
+
+Esta é a rota preferencial para perguntas mensais. O parâmetro `month` é
+obrigatório. Ela retorna em uma única resposta:
+
+- receitas, despesas e resultado líquido do mês, considerando pagos e pendentes;
+- saldo de abertura, balanço mensal e saldo atual calculados como no dashboard;
+- quantidade total de lançamentos;
+- separação entre lançamentos pagos e pendentes;
+- despesas do mês agrupadas por categoria.
+
+Exemplo de resposta:
+
+```json
+{
+  "month": "2026-07",
+  "period": { "from": "2026-07-01", "to": "2026-07-31" },
+  "income": 1700,
+  "expenses": 1250.5,
+  "net": 449.5,
+  "opening_balance": 300,
+  "monthly_balance": 749.5,
+  "current_balance": 510,
+  "transaction_count": 24,
+  "paid": { "income": 900, "expenses": 690, "net": 210, "count": 12 },
+  "pending": { "income": 800, "expenses": 560.5, "net": 239.5, "count": 12 },
+  "expenses_by_category": [
+    { "category": "Moradia", "amount": 600, "count": 2 }
+  ]
+}
+```
+
+Não use `/summary` sem `from` e `to` para responder perguntas mensais, pois isso
+retorna todo o histórico do usuário.
+
 ### Resumo e gráficos
 
 - `GET /summary?from=AAAA-MM-DD&to=AAAA-MM-DD&status=paid`
@@ -179,6 +216,13 @@ curl -sS 'https://finansaas.online/api/summary' \
   -H "X-Finansaas-Api-Key: $FINANSAAS_API_KEY"
 ```
 
+Relatório mensal recomendado:
+
+```bash
+curl -sS 'https://finansaas.online/api/monthly-report?month=2026-07' \
+  -H "X-Finansaas-Api-Key: $FINANSAAS_API_KEY"
+```
+
 ```bash
 curl -sS 'https://finansaas.online/api/transactions?from=2026-07-01&to=2026-07-31&limit=100' \
   -H "X-Finansaas-Api-Key: $FINANSAAS_API_KEY"
@@ -221,6 +265,10 @@ Use somente rotas documentadas sob https://finansaas.online/api.
 Autentique cada chamada usando X-Finansaas-Api-Key obtida do cofre de segredos.
 Nunca revele, imprima ou repita a chave. Nunca use /api/query ou /api/auth.
 
+Para qualquer resumo de um mês, use exclusivamente GET /monthly-report com o
+parâmetro month no formato AAAA-MM. Não use /summary sem from e to. Não transforme
+nem reescale números retornados pela API; formate apenas a moeda na apresentação.
+
 Antes de criar uma transação, determine tipo, descrição, valor positivo, data e
 status. Se algum dado estiver ambíguo, pergunte ao usuário. Antes de excluir,
 mostre o registro encontrado e peça confirmação explícita. Não invente dados ou
@@ -238,9 +286,10 @@ Execute nesta ordem:
 ```bash
 curl -i 'https://finansaas.online/api/health'
 curl -i 'https://finansaas.online/api/openapi.json'
+curl -i 'https://finansaas.online/api/monthly-report?month=2026-07' \
+  -H "X-Finansaas-Api-Key: $FINANSAAS_API_KEY"
 curl -i 'https://finansaas.online/api/transactions?limit=1' \
   -H "X-Finansaas-Api-Key: $FINANSAAS_API_KEY"
 ```
 
-Somente libere o agente quando os resultados forem, respectivamente, `200`,
-`200` e `200` no domínio de produção.
+Somente libere o agente quando todos os resultados forem `200` no domínio de produção.
