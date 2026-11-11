@@ -22,8 +22,10 @@ import {
   Info,
   Tag,
   CreditCard,
-  KeyRound
+  KeyRound,
+  AlertTriangle
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   DropdownMenu,
@@ -87,8 +89,37 @@ const Dashboard = () => {
     type: 'monthly' | 'accumulated';
   }>({ isOpen: false, type: 'monthly' });
 
-  const { user, signOut } = useAuth();
+  const { user, signOut, resendConfirmation } = useAuth();
+  const { toast } = useToast();
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
   const navigate = useNavigate();
+
+  const handleResendConfirmation = async () => {
+    setIsResendingEmail(true);
+    try {
+      const { error } = await resendConfirmation();
+      if (error) {
+        toast({
+          title: "Erro ao reenviar",
+          description: error.message || "Não foi possível reenviar o email de confirmação.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Email enviado!",
+          description: "Enviamos um novo link de confirmação para o seu email.",
+        });
+      }
+    } catch (err: unknown) {
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Erro ao reenviar email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
   const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions, refetch: refetchSubscriptions } = useSubscriptions();
 
@@ -367,6 +398,25 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {user && !user.email_verified_at && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 sm:px-6 py-2.5 text-sm text-amber-900 dark:text-amber-200">
+          <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-medium">Confirme seu email para proteger sua conta</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isResendingEmail}
+              onClick={handleResendConfirmation}
+              className="h-7 text-xs border-amber-500/30 hover:bg-amber-500/20 bg-background/50"
+            >
+              {isResendingEmail ? "Enviando..." : "Reenviar email"}
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-card border-b border-secondary/20">
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-6">

@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { passwordSchema, passwordStrength } from "@/lib/validation";
-import { Shield } from "lucide-react";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -221,19 +220,6 @@ const Login = () => {
                 </form>
               </TabsContent>
             </Tabs>
-            
-            <div className="mt-8 p-4 bg-muted/30 rounded-xl border border-secondary/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Shield className="w-4 h-4 text-primary" />
-                </div>
-                <span className="text-sm font-medium text-foreground">Conta de demonstração</span>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-2">
-                <div>Email: <span className="font-mono text-foreground">demo@financas.com</span></div>
-                <div>Senha: <span className="font-mono text-foreground">123456</span></div>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

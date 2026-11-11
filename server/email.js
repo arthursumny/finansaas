@@ -69,6 +69,27 @@ export function passwordResetTemplate(resetUrl) {
   return { subject, text, html };
 }
 
+export function accountConfirmationTemplate(confirmUrl) {
+  const subject = "FinanSaaS — Confirmação de email";
+  const text = `Olá!\n\nObrigado por se cadastrar no FinanSaaS.\n\nPara confirmar seu email e proteger sua conta, acesse o link abaixo (válido por 24 horas):\n${confirmUrl}\n\nSe você não criou uma conta, ignore este email.\n`;
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
+      <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">FinanSaaS</h2>
+      <p style="font-size: 15px; line-height: 1.5;">Olá,</p>
+      <p style="font-size: 15px; line-height: 1.5;">Obrigado por se cadastrar no FinanSaaS.</p>
+      <p style="font-size: 15px; line-height: 1.5;">Clique no botão abaixo para confirmar seu email e proteger sua conta (link válido por 24 horas):</p>
+      <div style="margin: 28px 0;">
+        <a href="${confirmUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; font-weight: 500; font-size: 15px; text-decoration: none; border-radius: 6px; display: inline-block;">Confirmar email</a>
+      </div>
+      <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Se o botão não funcionar, copie e cole o link abaixo no seu navegador:</p>
+      <p style="font-size: 13px; color: #2563eb; word-break: break-all; line-height: 1.4;">${confirmUrl}</p>
+      <hr style="margin: 28px 0; border: none; border-top: 1px solid #e2e8f0;" />
+      <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-bottom: 0;">Se você não criou uma conta no FinanSaaS, nenhuma ação é necessária.</p>
+    </div>
+  `;
+  return { subject, text, html };
+}
+
 export function emailConfirmationTemplate(confirmUrl) {
   const subject = "FinanSaaS — Confirmação de novo email";
   const text = `Olá!\n\nVocê solicitou a alteração do email da sua conta no FinanSaaS.\n\nPara confirmar este novo endereço de email, acesse o link abaixo (válido por 24 horas):\n${confirmUrl}\n\nSe você não solicitou esta alteração, ignore este email.\n`;

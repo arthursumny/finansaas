@@ -46,6 +46,7 @@ const Settings = () => {
     changePassword,
     changeEmail,
     confirmEmail,
+    resendConfirmation,
     signOutAll,
     listSessions,
     deleteAccount,
@@ -78,6 +79,34 @@ const Settings = () => {
 
   // Estados para encerramento de todas as sessões
   const [isSigningOutAll, setIsSigningOutAll] = useState(false);
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
+
+  const handleResendConfirmation = async () => {
+    setIsResendingConfirmation(true);
+    try {
+      const { error } = await resendConfirmation();
+      if (error) {
+        toast({
+          title: "Erro ao reenviar",
+          description: error.message || "Não foi possível reenviar o email de confirmação.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Email enviado!",
+          description: "Enviamos um novo link de confirmação para o seu email.",
+        });
+      }
+    } catch (err: unknown) {
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Erro ao reenviar email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResendingConfirmation(false);
+    }
+  };
 
   // Estados da aba de segurança (sessões)
   const [sessions, setSessions] = useState<LocalSessionInfo[]>([]);
@@ -350,10 +379,21 @@ const Settings = () => {
                         Email confirmado
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        Não confirmado
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Email não confirmado
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isResendingConfirmation}
+                          onClick={handleResendConfirmation}
+                          className="h-7 text-xs"
+                        >
+                          {isResendingConfirmation ? "Reenviando..." : "Reenviar email"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

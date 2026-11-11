@@ -89,11 +89,38 @@ class LocalAuth {
 
     try {
       const payload = await request("/auth/session");
-      setStoredSession(payload.session);
-      return { data: { session: payload.session as LocalSession }, error: null };
+      let activeSession = payload.session as LocalSession;
+
+      // Se faltar menos de 7 dias para expirar, faz refresh da sessão
+      const nowSec = Math.floor(Date.now() / 1000);
+      const sevenDaysSec = 7 * 24 * 60 * 60;
+      if (activeSession?.expires_at && activeSession.expires_at - nowSec < sevenDaysSec) {
+        try {
+          const refreshPayload = await request("/auth/refresh", { method: "POST" });
+          if (refreshPayload?.session) {
+            activeSession = refreshPayload.session as LocalSession;
+          }
+        } catch {
+          // falha no refresh não quebra a sessão se ela ainda for válida
+        }
+      }
+
+      setStoredSession(activeSession);
+      return { data: { session: activeSession }, error: null };
     } catch (error) {
       setStoredSession(null);
       return { data: { session: null }, error };
+    }
+  }
+
+  async refreshSession(): Promise<{ data: { session: LocalSession | null }; error: Error | null }> {
+    try {
+      const payload = await request("/auth/refresh", { method: "POST" });
+      setStoredSession(payload.session);
+      this.emit("TOKEN_REFRESHED", payload.session);
+      return { data: { session: payload.session as LocalSession }, error: null };
+    } catch (error) {
+      return { data: { session: null }, error: error instanceof Error ? error : new Error(String(error)) };
     }
   }
 
@@ -243,11 +270,11 @@ class LocalAuth {
     }
   }
 
-  async resendConfirmation(email: string): Promise<{ error: Error | null }> {
+  async resendConfirmation(email?: string): Promise<{ error: Error | null }> {
     try {
-      await request("/auth/forgot-password", {
+      await request("/auth/resend-confirmation", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: email ? JSON.stringify({ email }) : undefined,
       });
       return { error: null };
     } catch (error) {

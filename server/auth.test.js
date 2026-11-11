@@ -209,11 +209,13 @@ test("Fluxos de autenticação, recuperação de senha, sessões e rate limit", 
   assert.equal(validChange.response.status, 200);
 
   // A sessão atual (sessionToken2) ainda existe
-  const currentStillExists = db.prepare("SELECT * FROM sessions WHERE token = ?").get(sessionToken2);
+  const session2Hash = createHash("sha256").update(sessionToken2).digest("hex");
+  const session1Hash = createHash("sha256").update(sessionToken1).digest("hex");
+  const currentStillExists = db.prepare("SELECT * FROM sessions WHERE token_hash = ?").get(session2Hash);
   assert.ok(currentStillExists);
 
   // A outra sessão (sessionToken1) foi derrubada
-  const otherSession = db.prepare("SELECT * FROM sessions WHERE token = ?").get(sessionToken1);
+  const otherSession = db.prepare("SELECT * FROM sessions WHERE token_hash = ?").get(session1Hash);
   assert.equal(otherSession, undefined);
 
   // 8) signout-all derruba todas as sessões

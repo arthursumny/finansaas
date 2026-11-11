@@ -19,7 +19,8 @@ interface AuthContextType {
   confirmEmail: (token: string) => Promise<{ error: Error | null }>;
   listSessions: () => Promise<{ data: LocalSessionInfo[] | null; error: Error | null }>;
   deleteAccount: (password: string) => Promise<{ error: Error | null }>;
-  resendConfirmation: (email: string) => Promise<{ error: Error | null }>;
+  resendConfirmation: (email?: string) => Promise<{ error: Error | null }>;
+  refreshSession: () => Promise<{ session: LocalSession | null; error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -123,8 +124,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return await supabase.auth.deleteAccount(password);
   };
 
-  const resendConfirmation = async (email: string) => {
+  const resendConfirmation = async (email?: string) => {
     return await supabase.auth.resendConfirmation(email);
+  };
+
+  const refreshSession = async () => {
+    const res = await supabase.auth.refreshSession();
+    if (res.data?.session) {
+      setSession(res.data.session);
+      setUser(res.data.session.user);
+    }
+    return { session: res.data?.session ?? null, error: res.error };
   };
 
   const value = {
@@ -138,6 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     clearSession,
     signOutAll,
     refreshUser,
+    refreshSession,
     resetPasswordForEmail,
     resetPassword,
     changePassword,
