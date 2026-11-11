@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { LocalSession, LocalUser, supabase } from '@/integrations/supabase/client';
+import { LocalSession, LocalSessionInfo, LocalUser, supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   user: LocalUser | null;
@@ -8,6 +8,18 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: unknown }>;
   signUp: (email: string, password: string) => Promise<{ error: unknown }>;
   signOut: () => Promise<void>;
+  localSignOut: () => void;
+  clearSession: () => void;
+  signOutAll: () => Promise<{ error: Error | null }>;
+  refreshUser: () => Promise<{ user: LocalUser | null; error: Error | null }>;
+  resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>;
+  resetPassword: (payload: { token: string; password: string }) => Promise<{ error: Error | null }>;
+  changePassword: (payload: { currentPassword: string; newPassword: string }) => Promise<{ error: Error | null }>;
+  changeEmail: (payload: { password: string; newEmail: string }) => Promise<{ error: Error | null }>;
+  confirmEmail: (token: string) => Promise<{ error: Error | null }>;
+  listSessions: () => Promise<{ data: LocalSessionInfo[] | null; error: Error | null }>;
+  deleteAccount: (password: string) => Promise<{ error: Error | null }>;
+  resendConfirmation: (email: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,7 +32,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -34,7 +46,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -57,6 +71,62 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
+  const localSignOut = () => {
+    supabase.auth.localSignOut();
+  };
+
+  const clearSession = () => {
+    supabase.auth.clearSession();
+  };
+
+  const signOutAll = async () => {
+    return await supabase.auth.signOutAll();
+  };
+
+  const refreshUser = async () => {
+    const result = await supabase.auth.refreshUser();
+    if (result.user) {
+      setUser(result.user);
+    }
+    return result;
+  };
+
+  const resetPasswordForEmail = async (email: string) => {
+    return await supabase.auth.resetPasswordForEmail(email);
+  };
+
+  const resetPassword = async (payload: { token: string; password: string }) => {
+    return await supabase.auth.resetPassword(payload);
+  };
+
+  const changePassword = async (payload: { currentPassword: string; newPassword: string }) => {
+    return await supabase.auth.changePassword(payload);
+  };
+
+  const changeEmail = async (payload: { password: string; newEmail: string }) => {
+    return await supabase.auth.changeEmail(payload);
+  };
+
+  const confirmEmail = async (token: string) => {
+    const res = await supabase.auth.confirmEmail(token);
+    if (!res.error) {
+      await refreshUser();
+    }
+    return res;
+  };
+
+  const listSessions = async () => {
+    return await supabase.auth.listSessions();
+  };
+
+  const deleteAccount = async (password: string) => {
+    return await supabase.auth.deleteAccount(password);
+  };
+
+  const resendConfirmation = async (email: string) => {
+    return await supabase.auth.resendConfirmation(email);
+  };
+
   const value = {
     user,
     session,
@@ -64,6 +134,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signIn,
     signUp,
     signOut,
+    localSignOut,
+    clearSession,
+    signOutAll,
+    refreshUser,
+    resetPasswordForEmail,
+    resetPassword,
+    changePassword,
+    changeEmail,
+    confirmEmail,
+    listSessions,
+    deleteAccount,
+    resendConfirmation,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

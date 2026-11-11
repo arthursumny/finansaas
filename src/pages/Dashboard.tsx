@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,21 +88,24 @@ const Dashboard = () => {
   }>({ isOpen: false, type: 'monthly' });
 
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
   const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions, refetch: refetchSubscriptions } = useSubscriptions();
 
   const handleAddSubscription = async (data: SubscriptionFormData) => {
-    await addSubscription(data);
+    const res = await addSubscription(data);
     const freshSubscriptions = await refetchSubscriptions();
     await ensureMonthlyTransactions(currentDate, 36, freshSubscriptions);
     await refetch();
+    return res;
   };
 
   const handleUpdateSubscription = async (id: string, data: SubscriptionFormData) => {
-    await updateSubscription(id, data);
+    const res = await updateSubscription(id, data);
     const freshSubscriptions = await refetchSubscriptions();
     await ensureMonthlyTransactions(currentDate, 36, freshSubscriptions);
     await refetch();
+    return res;
   };
 
   const handleDeleteSubscription = async (id: string) => {
@@ -210,7 +214,7 @@ const Dashboard = () => {
       const groupFields: Array<keyof Pick<Transaction, 'type' | 'description' | 'amount' | 'category' | 'status'>> = ['type', 'description', 'amount', 'category', 'status'];
       for (const field of groupFields) {
         if (newData[field] !== old[field]) {
-          updates[field] = newData[field];
+          (updates as Record<string, any>)[field] = newData[field];
         }
       }
       if (!haveSameTagIds(old.tags, newData.tag_ids)) {
@@ -527,6 +531,15 @@ const Dashboard = () => {
                         <KeyRound className="w-4 h-4 mr-2" />
                         Tokens da API
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate("/settings")}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Configurações
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleLogout}>
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Sair
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -639,6 +652,18 @@ const Dashboard = () => {
                   >
                     <KeyRound className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">API</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/settings")}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Configurações"
+                  >
+                    <Settings className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Configurações</span>
                   </Button>
                 )}
               </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
+import { passwordSchema, passwordStrength } from "@/lib/validation";
 import { Shield } from "lucide-react";
 
 const Login = () => {
@@ -15,6 +16,8 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [signUpPasswordError, setSignUpPasswordError] = useState<string | null>(null);
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signIn, signUp } = useAuth();
@@ -27,8 +30,20 @@ const Login = () => {
     }
   }, [user, navigate]);
 
+  const strength = passwordStrength(password);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSignUpPasswordError(null);
+
+    if (isSignUp) {
+      const validation = passwordSchema.safeParse(password);
+      if (!validation.success) {
+        setSignUpPasswordError(validation.error.errors[0]?.message || "Senha inválida.");
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
@@ -37,15 +52,20 @@ const Login = () => {
         : await signIn(email, password);
 
       if (error) {
+        const errorObj = error as { message?: string };
+        const msg = errorObj.message || (error instanceof Error ? error.message : "Erro na autenticação.");
+        if (isSignUp && msg.toLowerCase().includes("cadastrado")) {
+          setSignUpPasswordError(null);
+        }
         toast({
           title: `Erro no ${isSignUp ? 'cadastro' : 'login'}`,
-          description: error.message,
+          description: msg,
           variant: "destructive",
         });
       } else if (isSignUp) {
         toast({
           title: "Cadastro realizado!",
-          description: "Verifique seu email para confirmar a conta.",
+          description: "Sua conta foi criada com sucesso.",
         });
       } else {
         toast({
@@ -91,7 +111,13 @@ const Login = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={isSignUp ? "signup" : "signin"} onValueChange={(value) => setIsSignUp(value === "signup")}>
+            <Tabs
+              value={isSignUp ? "signup" : "signin"}
+              onValueChange={(value) => {
+                setIsSignUp(value === "signup");
+                setSignUpPasswordError(null);
+              }}
+            >
               <TabsList className="grid w-full grid-cols-2 bg-muted/50">
                 <TabsTrigger value="signin" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Entrar</TabsTrigger>
                 <TabsTrigger value="signup" className="data-[state=active]:bg-background data-[state=active]:text-foreground">Criar Conta</TabsTrigger>
@@ -112,7 +138,15 @@ const Login = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium text-foreground">Senha</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password" className="text-sm font-medium text-foreground">Senha</Label>
+                      <Link
+                        to="/forgot-password"
+                        className="text-xs text-primary hover:underline font-medium"
+                      >
+                        Esqueci minha senha
+                      </Link>
+                    </div>
                     <Input
                       id="password"
                       type="password"
@@ -148,13 +182,38 @@ const Login = () => {
                     <Input
                       id="signup-password"
                       type="password"
-                      placeholder="Digite sua senha (mínimo 6 caracteres)"
+                      placeholder="Mínimo 8 caracteres (letras e números)"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (signUpPasswordError) setSignUpPasswordError(null);
+                      }}
                       required
-                      minLength={6}
                       className="h-11 border-secondary focus:border-primary"
                     />
+
+                    {password && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Força da senha:</span>
+                          <span className="font-medium">{strength.label}</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden flex gap-1">
+                          {[0, 1, 2, 3].map((step) => (
+                            <div
+                              key={step}
+                              className={`h-full flex-1 transition-all rounded-full ${
+                                strength.score >= step + 1 ? strength.color : "bg-muted"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {signUpPasswordError && (
+                      <p className="text-xs text-destructive mt-1">{signUpPasswordError}</p>
+                    )}
                   </div>
                   <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg" disabled={isLoading}>
                     {isLoading ? "Criando conta..." : "Criar Conta"}

@@ -31,13 +31,21 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
     return { response, body: text ? JSON.parse(text) : null };
   }
 
+  const today = new Date();
+  const currentMonthKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
+  const prevDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+  const prevMonthKey = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, "0")}`;
+  const lastDayOfCurrentMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)).getUTCDate();
+  const currentMonthStart = `${currentMonthKey}-01`;
+  const currentMonthEnd = `${currentMonthKey}-${String(lastDayOfCurrentMonth).padStart(2, "0")}`;
+
   const health = await request("/health");
   assert.equal(health.response.status, 200);
 
   const signup = await request("/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "api-test@finansaas.local", password: "senha-segura" }),
+    body: JSON.stringify({ email: "api-test@finansaas.local", password: "senha-segura1" }),
   });
   assert.equal(signup.response.status, 200);
   const sessionToken = signup.body.session.access_token;
@@ -98,7 +106,7 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   const deniedWrite = await request("/transactions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Finansaas-Api-Key": limitedApiKey },
-    body: JSON.stringify({ type: "expense", description: "Bloqueada", amount: 1, date: "2026-07-13", status: "paid" }),
+    body: JSON.stringify({ type: "expense", description: "Bloqueada", amount: 1, date: `${currentMonthKey}-10`, status: "paid" }),
   });
   assert.equal(deniedWrite.response.status, 403);
 
@@ -110,7 +118,7 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   const previousIncome = await request("/transactions", {
     method: "POST",
     headers: apiHeaders,
-    body: JSON.stringify({ type: "income", description: "Salário anterior", amount: 100, date: "2026-06-30", status: "paid" }),
+    body: JSON.stringify({ type: "income", description: "Salário anterior", amount: 100, date: `${prevMonthKey}-25`, status: "paid" }),
   });
   assert.equal(previousIncome.response.status, 201);
 
@@ -155,7 +163,7 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
       type: "expense",
       description: "Almoço com cliente",
       amount: 42.5,
-      date: "2026-07-13",
+      date: `${currentMonthKey}-13`,
       status: "paid",
       tag_ids: [tag.body.data.id],
     }),
@@ -169,7 +177,7 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   assert.equal(fetched.response.status, 200);
   assert.equal(fetched.body.data.id, transactionId);
 
-  const listed = await request("/transactions?from=2026-07-01&to=2026-07-31", { headers: apiHeaders });
+  const listed = await request(`/transactions?from=${currentMonthStart}&to=${currentMonthEnd}`, { headers: apiHeaders });
   assert.equal(listed.response.status, 200);
   assert.equal(listed.body.data.length, 1);
 
@@ -191,9 +199,9 @@ test("API pública cobre autenticação, escopos e CRUD financeiro", async (cont
   assert.equal(cashflow.response.status, 200);
   assert.equal(cashflow.body.data.at(-1).cumulative_balance, 57.5);
 
-  const monthlyReport = await request("/monthly-report?month=2026-07", { headers: apiHeaders });
+  const monthlyReport = await request(`/monthly-report?month=${currentMonthKey}`, { headers: apiHeaders });
   assert.equal(monthlyReport.response.status, 200);
-  assert.deepEqual(monthlyReport.body.period, { from: "2026-07-01", to: "2026-07-31" });
+  assert.deepEqual(monthlyReport.body.period, { from: currentMonthStart, to: currentMonthEnd });
   assert.equal(monthlyReport.body.income, 0);
   assert.equal(monthlyReport.body.expenses, 42.5);
   assert.equal(monthlyReport.body.net, -42.5);

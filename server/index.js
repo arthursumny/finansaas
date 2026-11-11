@@ -6,10 +6,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { createPublicApiRouter } from "./public-api.js";
+import { emailConfirmationTemplate, isEmailEnabled, passwordResetTemplate, sendEmail } from "./email.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.DATA_DIR || `${__dirname}/../data`;
 const dbPath = process.env.DATABASE_PATH || `${dataDir}/finansaas.sqlite`;
+const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "http://localhost:8080";
 
 fs.mkdirSync(dataDir, { recursive: true });
 
@@ -20,6 +22,46 @@ db.pragma("foreign_keys = ON");
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+
+const rateLimits = new Map();
+
+function resetRateLimits() {
+  rateLimits.clear();
+}
+
+function checkRateLimit(key, maxAttempts, windowMs) {
+  const nowMs = Date.now();
+  const timestamps = (rateLimits.get(key) || []).filter((ts) => nowMs - ts < windowMs);
+  if (timestamps.length >= maxAttempts) {
+    const oldest = timestamps[0];
+    const retryAfterSeconds = Math.max(Math.ceil((oldest + windowMs - nowMs) / 1000), 1);
+    const retryAfterMinutes = Math.max(Math.ceil(retryAfterSeconds / 60), 1);
+    return {
+      limited: true,
+      retryAfterSeconds,
+      retryAfterMinutes,
+    };
+  }
+  timestamps.push(nowMs);
+  rateLimits.set(key, timestamps);
+  return { limited: false };
+}
+
+function validatePassword(password) {
+  if (!password || typeof password !== "string") {
+    return { valid: false, message: "Informe a senha." };
+  }
+  if (password.length < 8) {
+    return { valid: false, message: "A senha deve ter pelo menos 8 caracteres." };
+  }
+  if (!/[a-zA-Z]/.test(password)) {
+    return { valid: false, message: "A senha deve conter pelo menos uma letra." };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: "A senha deve conter pelo menos um número." };
+  }
+  return { valid: true };
+}
 
 const userScopedTables = new Set([
   "api_tokens",
@@ -97,7 +139,9 @@ function initSchema() {
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      email_verified_at TEXT,
+      pending_email TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -105,6 +149,16 @@ function initSchema() {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS profiles (
@@ -228,7 +282,19 @@ function initSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_subscription_date
       ON transactions(subscription_id, date)
       WHERE subscription_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_auth_tokens_hash ON auth_tokens(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_type ON auth_tokens(user_id, type);
   `);
+
+  const userColumns = db.prepare("PRAGMA table_info(users)").all().map((column) => column.name);
+  if (!userColumns.includes("email_verified_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN email_verified_at TEXT");
+  }
+  if (!userColumns.includes("pending_email")) {
+    db.exec("ALTER TABLE users ADD COLUMN pending_email TEXT");
+  }
+  db.exec("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
 
   for (const table of [
     "api_tokens", "budgets", "categories", "goals", "profiles", "subscriptions",
@@ -269,6 +335,8 @@ function toPublicUser(user) {
     id: user.id,
     email: user.email,
     created_at: user.created_at,
+    email_verified_at: user.email_verified_at ?? null,
+    pending_email: user.pending_email ?? null,
   };
 }
 
@@ -311,6 +379,7 @@ function requireUser(req, res, next) {
   }
 
   req.user = session;
+  req.sessionToken = token;
   req.authMode = "session";
   req.scopes = ["*"];
   next();
@@ -536,14 +605,25 @@ app.post("/api/auth/signup", (req, res) => {
   const password = String(req.body.password || "");
 
   if (!email || !password) return res.status(400).json({ error: { message: "Informe email e senha." } });
-  if (password.length < 6) return res.status(400).json({ error: { message: "A senha deve ter pelo menos 6 caracteres." } });
+
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ error: { message: passwordValidation.message } });
+  }
 
   try {
     const createdAt = now();
-    const user = { id: randomUUID(), email, password_hash: hashPassword(password), created_at: createdAt };
+    const user = {
+      id: randomUUID(),
+      email,
+      password_hash: hashPassword(password),
+      created_at: createdAt,
+      email_verified_at: createdAt,
+      pending_email: null,
+    };
     const tx = db.transaction(() => {
-      db.prepare("INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)")
-        .run(user.id, user.email, user.password_hash, user.created_at);
+      db.prepare("INSERT INTO users (id, email, password_hash, created_at, email_verified_at, pending_email) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(user.id, user.email, user.password_hash, user.created_at, user.email_verified_at, user.pending_email);
       db.prepare("INSERT INTO profiles (id, email, full_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
         .run(user.id, user.email, user.email, createdAt, createdAt);
       createDefaultCategories(user.id);
@@ -557,23 +637,285 @@ app.post("/api/auth/signup", (req, res) => {
 });
 
 app.post("/api/auth/signin", (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || "127.0.0.1";
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
+
+  const rateKey = `signin:${ip}:${email || "none"}`;
+  const signinLimit = Number(process.env.AUTH_SIGNIN_LIMIT || 5);
+  const rateCheck = checkRateLimit(rateKey, signinLimit, 15 * 60 * 1000);
+  if (rateCheck.limited) {
+    res.setHeader("Retry-After", String(rateCheck.retryAfterSeconds));
+    return res.status(429).json({
+      error: {
+        code: "rate_limited",
+        message: `Muitas tentativas. Tente novamente em ${rateCheck.retryAfterMinutes} minuto${rateCheck.retryAfterMinutes > 1 ? "s" : ""}.`,
+      },
+    });
+  }
+
   const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 
   if (!user || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: { message: "Email ou senha inválidos." } });
   }
 
+  rateLimits.delete(rateKey);
   res.json({ session: createSession(user), user: toPublicUser(user) });
 });
 
 app.get("/api/auth/session", requireUser, requireSession, (req, res) => {
-  res.json({ session: createSession(req.user), user: toPublicUser(req.user) });
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) || req.user;
+  res.json({ session: createSession(user), user: toPublicUser(user) });
 });
 
 app.post("/api/auth/signout", requireUser, requireSession, (req, res) => {
   db.prepare("DELETE FROM sessions WHERE token = ?").run(req.get("authorization").replace(/^Bearer\s+/i, ""));
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || "127.0.0.1";
+  const email = String(req.body?.email || "").trim().toLowerCase();
+
+  const rateKey = `forgot-password:${ip}:${email || "none"}`;
+  const rateCheck = checkRateLimit(rateKey, 5, 60 * 60 * 1000);
+  if (rateCheck.limited) {
+    res.setHeader("Retry-After", String(rateCheck.retryAfterSeconds));
+    return res.status(429).json({
+      error: {
+        code: "rate_limited",
+        message: `Muitas tentativas. Tente novamente em ${rateCheck.retryAfterMinutes} minuto${rateCheck.retryAfterMinutes > 1 ? "s" : ""}.`,
+      },
+    });
+  }
+
+  if (!email) {
+    return res.json({ ok: true });
+  }
+
+  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  if (!user) {
+    return res.json({ ok: true });
+  }
+
+  db.prepare("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND type = 'password_reset' AND used_at IS NULL")
+    .run(now(), user.id);
+
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const tokenId = randomUUID();
+
+  db.prepare("INSERT INTO auth_tokens (id, user_id, type, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(tokenId, user.id, "password_reset", tokenHash, expiresAt, now());
+
+  const resetUrl = `${APP_PUBLIC_URL}/reset-password?token=${rawToken}`;
+  const { subject, text, html } = passwordResetTemplate(resetUrl);
+  await sendEmail({ to: user.email, subject, text, html });
+
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/reset-password", (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || "127.0.0.1";
+  const token = String(req.body?.token || "").trim();
+  const password = String(req.body?.password || "");
+
+  const rateKey = `reset-password:${ip}:${token || "none"}`;
+  const rateCheck = checkRateLimit(rateKey, 10, 60 * 60 * 1000);
+  if (rateCheck.limited) {
+    res.setHeader("Retry-After", String(rateCheck.retryAfterSeconds));
+    return res.status(429).json({
+      error: {
+        code: "rate_limited",
+        message: `Muitas tentativas. Tente novamente em ${rateCheck.retryAfterMinutes} minuto${rateCheck.retryAfterMinutes > 1 ? "s" : ""}.`,
+      },
+    });
+  }
+
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.valid) {
+    return res.status(400).json({ error: { message: passwordValidation.message } });
+  }
+
+  if (!token) {
+    return res.status(400).json({ error: { code: "invalid_token", message: "Link inválido ou expirado." } });
+  }
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const tokenRow = db.prepare("SELECT * FROM auth_tokens WHERE token_hash = ? AND type = 'password_reset'").get(tokenHash);
+
+  if (!tokenRow || tokenRow.used_at || new Date(tokenRow.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: { code: "invalid_token", message: "Link inválido ou expirado." } });
+  }
+
+  const newHash = hashPassword(password);
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, tokenRow.user_id);
+    db.prepare("UPDATE auth_tokens SET used_at = ? WHERE id = ?").run(now(), tokenRow.id);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(tokenRow.user_id);
+  });
+  tx();
+
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/change-password", requireUser, requireSession, (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || "127.0.0.1";
+  const rateKey = `change-password:${ip}:${req.user.id}`;
+  const rateCheck = checkRateLimit(rateKey, 10, 60 * 60 * 1000);
+  if (rateCheck.limited) {
+    res.setHeader("Retry-After", String(rateCheck.retryAfterSeconds));
+    return res.status(429).json({
+      error: {
+        code: "rate_limited",
+        message: `Muitas tentativas. Tente novamente em ${rateCheck.retryAfterMinutes} minuto${rateCheck.retryAfterMinutes > 1 ? "s" : ""}.`,
+      },
+    });
+  }
+
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newPassword = String(req.body?.newPassword || "");
+
+  const currentUser = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  if (!currentUser || !verifyPassword(currentPassword, currentUser.password_hash)) {
+    return res.status(400).json({ error: { message: "Senha atual incorreta." } });
+  }
+
+  const validation = validatePassword(newPassword);
+  if (!validation.valid) {
+    return res.status(400).json({ error: { message: validation.message } });
+  }
+
+  const newHash = hashPassword(newPassword);
+  const tx = db.transaction(() => {
+    if (!currentUser.email_verified_at) {
+      db.prepare("UPDATE users SET password_hash = ?, email_verified_at = ? WHERE id = ?")
+        .run(newHash, now(), currentUser.id);
+    } else {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+        .run(newHash, currentUser.id);
+    }
+    db.prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?")
+      .run(currentUser.id, req.sessionToken);
+  });
+  tx();
+
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/change-email", requireUser, requireSession, async (req, res) => {
+  if (!isEmailEnabled()) {
+    return res.status(503).json({
+      error: {
+        code: "email_disabled",
+        message: "Envio de email não configurado no servidor.",
+      },
+    });
+  }
+
+  const password = String(req.body?.password || "");
+  const newEmail = String(req.body?.newEmail || "").trim().toLowerCase();
+
+  const currentUser = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  if (!currentUser || !verifyPassword(password, currentUser.password_hash)) {
+    return res.status(400).json({ error: { message: "Senha incorreta." } });
+  }
+
+  if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    return res.status(400).json({ error: { message: "Informe um email válido." } });
+  }
+
+  if (newEmail === currentUser.email) {
+    return res.status(400).json({ error: { message: "O novo email deve ser diferente do email atual." } });
+  }
+
+  const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(newEmail, currentUser.id);
+  if (existing) {
+    return res.status(409).json({ error: { code: "email_in_use", message: "Email já cadastrado." } });
+  }
+
+  db.prepare("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND type = 'email_confirm' AND used_at IS NULL")
+    .run(now(), currentUser.id);
+
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const tokenId = randomUUID();
+
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE users SET pending_email = ? WHERE id = ?").run(newEmail, currentUser.id);
+    db.prepare("INSERT INTO auth_tokens (id, user_id, type, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(tokenId, currentUser.id, "email_confirm", tokenHash, expiresAt, now());
+  });
+  tx();
+
+  const confirmUrl = `${APP_PUBLIC_URL}/settings?confirm_email_token=${rawToken}`;
+  const { subject, text, html } = emailConfirmationTemplate(confirmUrl);
+  await sendEmail({ to: newEmail, subject, text, html });
+
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/confirm-email", (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  if (!token) {
+    return res.status(400).json({ error: { code: "invalid_token", message: "Link de confirmação inválido ou expirado." } });
+  }
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const tokenRow = db.prepare("SELECT * FROM auth_tokens WHERE token_hash = ? AND type = 'email_confirm'").get(tokenHash);
+
+  if (!tokenRow || tokenRow.used_at || new Date(tokenRow.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: { code: "invalid_token", message: "Link de confirmação inválido ou expirado." } });
+  }
+
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(tokenRow.user_id);
+  if (!user || !user.pending_email) {
+    return res.status(400).json({ error: { code: "no_pending_email", message: "Nenhum email pendente de confirmação." } });
+  }
+
+  const newEmail = user.pending_email;
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE users SET email = pending_email, pending_email = NULL, email_verified_at = ? WHERE id = ?")
+      .run(now(), user.id);
+    db.prepare("UPDATE profiles SET email = ? WHERE id = ?")
+      .run(newEmail, user.id);
+    db.prepare("UPDATE auth_tokens SET used_at = ? WHERE id = ?")
+      .run(now(), tokenRow.id);
+  });
+  tx();
+
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/signout-all", requireUser, requireSession, (req, res) => {
+  db.prepare("DELETE FROM sessions WHERE user_id = ?").run(req.user.id);
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/sessions", requireUser, requireSession, (req, res) => {
+  const sessions = db.prepare("SELECT token, created_at, expires_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC").all(req.user.id);
+  const currentToken = req.sessionToken;
+  const list = sessions.map((s) => ({
+    id: createHash("sha256").update(s.token).digest("hex").slice(0, 12),
+    created_at: s.created_at,
+    expires_at: s.expires_at,
+    current: s.token === currentToken,
+  }));
+  res.json({ sessions: list });
+});
+
+app.delete("/api/auth/account", requireUser, requireSession, (req, res) => {
+  const password = String(req.body?.password || "");
+  const currentUser = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+
+  if (!currentUser || !verifyPassword(password, currentUser.password_hash)) {
+    return res.status(400).json({ error: { message: "Senha incorreta." } });
+  }
+
+  db.prepare("DELETE FROM users WHERE id = ?").run(currentUser.id);
   res.json({ ok: true });
 });
 
@@ -625,7 +967,7 @@ export function startServer(listenPort = port) {
   });
 }
 
-export { app, db };
+export { app, db, resetRateLimits, validatePassword };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   startServer();

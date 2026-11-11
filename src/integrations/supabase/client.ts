@@ -2,6 +2,15 @@ export interface LocalUser {
   id: string;
   email?: string;
   created_at?: string;
+  email_verified_at?: string | null;
+  pending_email?: string | null;
+}
+
+export interface LocalSessionInfo {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
 }
 
 export interface LocalSession {
@@ -125,6 +134,136 @@ class LocalAuth {
 
     setStoredSession(null);
     this.emit("SIGNED_OUT", null);
+  }
+
+  localSignOut() {
+    setStoredSession(null);
+    this.emit("SIGNED_OUT", null);
+  }
+
+  clearSession() {
+    this.localSignOut();
+  }
+
+  async signOutAll(): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/signout-all", { method: "POST" });
+    } catch (error) {
+      setStoredSession(null);
+      this.emit("SIGNED_OUT", null);
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+
+    setStoredSession(null);
+    this.emit("SIGNED_OUT", null);
+    return { error: null };
+  }
+
+  async resetPasswordForEmail(email: string): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async resetPassword(payload: { token: string; password: string }): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      this.localSignOut();
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async changePassword(payload: { currentPassword: string; newPassword: string }): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async changeEmail(payload: { password: string; newEmail: string }): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/change-email", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async confirmEmail(token: string): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/confirm-email", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async listSessions(): Promise<{ data: LocalSessionInfo[] | null; error: Error | null }> {
+    try {
+      const payload = await request("/auth/sessions");
+      return { data: (payload.sessions || []) as LocalSessionInfo[], error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async deleteAccount(password: string): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/account", {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+      });
+      setStoredSession(null);
+      this.emit("SIGNED_OUT", null);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async resendConfirmation(email: string): Promise<{ error: Error | null }> {
+    try {
+      await request("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  async refreshUser(): Promise<{ user: LocalUser | null; error: Error | null }> {
+    try {
+      const payload = await request("/auth/session");
+      setStoredSession(payload.session);
+      this.emit("USER_UPDATED", payload.session);
+      return { user: payload.user as LocalUser, error: null };
+    } catch (error) {
+      return { user: null, error: error instanceof Error ? error : new Error(String(error)) };
+    }
   }
 }
 
