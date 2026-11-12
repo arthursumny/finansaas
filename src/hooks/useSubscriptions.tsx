@@ -195,6 +195,7 @@ export const useSubscriptions = () => {
       const { error: transactionsError } = await supabase
         .from('transactions')
         .delete()
+        .gte('date', format(new Date(), 'yyyy-MM-dd'))
         .match({ user_id: user.id, subscription_id: id });
 
       if (transactionsError) throw transactionsError;
@@ -209,8 +210,8 @@ export const useSubscriptions = () => {
 
       setSubscriptions(prev => prev.filter(sub => sub.id !== id));
       toast({
-        title: 'Assinatura excluida',
-        description: 'Assinatura mensal removida com sucesso!',
+        title: 'Assinatura excluída',
+        description: 'Cobranças futuras removidas; histórico mantido.',
       });
     } catch (error: any) {
       toast({
@@ -262,6 +263,9 @@ export const useSubscriptions = () => {
     );
 
     const inserts: any[] = [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
 
     for (const sub of activeSubscriptions) {
       for (let offset = 0; offset < monthsAhead; offset += 1) {
@@ -286,6 +290,12 @@ export const useSubscriptions = () => {
           continue;
         }
 
+        const occYear = occurrenceDate.getFullYear();
+        const occMonth = occurrenceDate.getMonth();
+        const isFutureMonth =
+          occYear > currentYear || (occYear === currentYear && occMonth > currentMonth);
+        const status = isFutureMonth ? 'pending' : sub.status;
+
         inserts.push({
           user_id: user.id,
           type: sub.type,
@@ -293,7 +303,7 @@ export const useSubscriptions = () => {
           amount: sub.amount,
           date: occurrenceDateStr,
           category: sub.category,
-          status: sub.status,
+          status,
           is_recurring: false,
           is_subscription: true,
           subscription_id: sub.id,

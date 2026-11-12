@@ -337,6 +337,9 @@ export const useTransactions = () => {
     if (!user || !originalTransaction.recurrence_group_id) return;
 
     try {
+      const today = new Date();
+      const todayStr = format(today, 'yyyy-MM-dd');
+
       // Deleta todas as transações com o mesmo recurrence_group_id
       const { error } = await supabase
         .from('transactions')
@@ -344,7 +347,8 @@ export const useTransactions = () => {
         .match({ 
           user_id: user.id,
           recurrence_group_id: originalTransaction.recurrence_group_id 
-        });
+        })
+        .gte('date', todayStr);
 
       if (error) throw error;
 
@@ -352,7 +356,7 @@ export const useTransactions = () => {
 
       toast({
         title: "Transações recorrentes excluídas",
-        description: "Todas as transações recorrentes foram removidas.",
+        description: "Transações futuras removidas; histórico mantido.",
       });
     } catch (error: any) {
       toast({

@@ -85,7 +85,9 @@ const Dashboard = () => {
     return cardSummaries.filter(c => c.is_active !== false);
   }, [cardSummaries]);
   const totalOpenInvoices = useMemo(() => {
-    return activeCardSummaries.reduce((sum, c) => sum + (c.current_invoice?.total || 0), 0);
+    return activeCardSummaries
+      .filter(c => c.shared_with_parent !== true)
+      .reduce((sum, c) => sum + (c.current_invoice?.total || 0), 0);
   }, [activeCardSummaries]);
   const closingSoonCards = useMemo(() => {
     return activeCardSummaries.filter(c => c.closing_soon);
