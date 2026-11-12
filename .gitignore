@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Segredos e notas internas
+.env
+.env.*
+!.env.example
+.env.compose.example
+.claude/
