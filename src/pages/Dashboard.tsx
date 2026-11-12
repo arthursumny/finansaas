@@ -62,6 +62,7 @@ import BalanceDetailModal from "@/components/BalanceDetailModal";
 
 type TransactionFormData = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'tags'> & {
   tag_ids?: string[];
+  installments?: number;
 };
 
 const Dashboard = () => {
@@ -130,7 +131,7 @@ const Dashboard = () => {
       setIsResendingEmail(false);
     }
   };
-  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
+  const { transactions, loading, addTransaction, addInstallments, updateTransaction, deleteTransaction, deleteMultipleTransactions, deleteInstallmentGroup, updateInstallmentGroup, deleteAllRecurringTransactions, updateAllRecurringTransactions, refetch } = useTransactions();
   const { subscriptions, loading: subscriptionsLoading, addSubscription, updateSubscription, deleteSubscription, ensureMonthlyTransactions, refetch: refetchSubscriptions } = useSubscriptions();
 
   const handleAddSubscription = async (data: SubscriptionFormData) => {
@@ -172,7 +173,21 @@ const Dashboard = () => {
   };
 
   const handleAddTransaction = async (transactionData: TransactionFormData) => {
-    await addTransaction(transactionData);
+    if (transactionData.installments && transactionData.installments > 1 && transactionData.card_id) {
+      await addInstallments({
+        description: transactionData.description,
+        amount: transactionData.amount,
+        date: transactionData.date,
+        type: transactionData.type,
+        category: transactionData.category,
+        status: transactionData.status,
+        card_id: transactionData.card_id,
+        payment_method: transactionData.payment_method || 'credit',
+        installments: transactionData.installments,
+      });
+    } else {
+      await addTransaction(transactionData);
+    }
     setShowTransactionForm(false);
   };
 
@@ -1090,6 +1105,7 @@ const Dashboard = () => {
               <TransactionList
                 transactions={currentMonthTransactions}
                 onDelete={deleteTransaction}
+                onDeleteInstallmentGroup={deleteInstallmentGroup}
                 onUpdate={updateTransaction}
                 onEdit={handleOpenEdit}
                 onDeleteAllRecurring={deleteAllRecurringTransactions}

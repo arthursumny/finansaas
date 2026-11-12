@@ -56,6 +56,9 @@ export interface InvoiceTransaction {
   date: string;
   category: string;
   status: 'paid' | 'pending';
+  installment_number?: number | null;
+  installment_total?: number | null;
+  installment_group_id?: string | null;
 }
 
 export interface CardInvoiceDetails extends CardInvoiceSummary {
@@ -110,6 +113,11 @@ export const useCards = () => {
 
   const loading = (cardsLoading || summaryLoading || authLoading) && !!user;
 
+  const fetchCards = useCallback(async () => {
+    const res = await refetchCards();
+    return res.data || [];
+  }, [refetchCards]);
+
   const refetch = useCallback(async () => {
     const [cardsRes, summaryRes] = await Promise.all([
       refetchCards(),
@@ -121,7 +129,7 @@ export const useCards = () => {
     };
   }, [refetchCards, refetchSummary]);
 
-  const addCard = async (cardData: CardFormData): Promise<Card | null> => {
+  const addCard = useCallback(async (cardData: CardFormData): Promise<Card | null> => {
     if (!user) return null;
 
     try {
@@ -156,9 +164,11 @@ export const useCards = () => {
       });
       return null;
     }
-  };
+  }, [user, queryClient, toast]);
 
-  const updateCard = async (id: string, updates: Partial<CardFormData>): Promise<Card | null> => {
+  const createCard = addCard;
+
+  const updateCard = useCallback(async (id: string, updates: Partial<CardFormData>): Promise<Card | null> => {
     if (!user) return null;
 
     try {
@@ -190,9 +200,9 @@ export const useCards = () => {
       });
       return null;
     }
-  };
+  }, [user, queryClient, toast]);
 
-  const deleteCard = async (id: string): Promise<boolean> => {
+  const deleteCard = useCallback(async (id: string): Promise<boolean> => {
     if (!user) return false;
 
     try {
@@ -222,9 +232,9 @@ export const useCards = () => {
       });
       return false;
     }
-  };
+  }, [user, queryClient, toast]);
 
-  const fetchInvoice = async (cardId: string, month?: string): Promise<CardInvoiceDetails | null> => {
+  const fetchInvoice = useCallback(async (cardId: string, month?: string): Promise<CardInvoiceDetails | null> => {
     try {
       const query = month ? `?month=${encodeURIComponent(month)}` : '';
       const res = await apiFetch<CardInvoiceDetails>(`/cards/${cardId}/invoice${query}`);
@@ -233,9 +243,9 @@ export const useCards = () => {
       console.error('Erro ao buscar fatura:', error);
       return null;
     }
-  };
+  }, []);
 
-  const fetchInvoicesHistory = async (cardId: string): Promise<CardInvoiceSummary[]> => {
+  const fetchInvoicesHistory = useCallback(async (cardId: string): Promise<CardInvoiceSummary[]> => {
     try {
       const res = await apiFetch<CardInvoiceSummary[]>(`/cards/${cardId}/invoices`);
       return Array.isArray(res) ? res : [];
@@ -243,17 +253,63 @@ export const useCards = () => {
       console.error('Erro ao buscar histórico de faturas:', error);
       return [];
     }
-  };
+  }, []);
+
+  const payInvoice = useCallback(async (cardId: string, month: string) => {
+    try {
+      const res = await apiFetch<{ updated: number; total_paid: number; reference_month: string }>(
+        `/cards/${cardId}/invoice/${encodeURIComponent(month)}/pay`,
+        { method: 'POST' }
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      ]);
+      return res;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao pagar fatura",
+        description: error.message || "Não foi possível registrar o pagamento da fatura.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  }, [queryClient, toast]);
+
+  const unpayInvoice = useCallback(async (cardId: string, month: string) => {
+    try {
+      const res = await apiFetch<{ updated: number }>(
+        `/cards/${cardId}/invoice/${encodeURIComponent(month)}/unpay`,
+        { method: 'POST' }
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      ]);
+      return res;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao reabrir fatura",
+        description: error.message || "Não foi possível reabrir a fatura.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  }, [queryClient, toast]);
 
   return {
     cards,
     summary,
     loading,
     addCard,
+    createCard,
     updateCard,
     deleteCard,
+    fetchCards,
     fetchInvoice,
     fetchInvoicesHistory,
+    payInvoice,
+    unpayInvoice,
     refetch,
   };
 };

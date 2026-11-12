@@ -29,6 +29,16 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import DiscountModal from "./DiscountModal";
 import AbatementModal from "./AbatementModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Transaction {
   id: string;
@@ -47,6 +57,9 @@ interface Transaction {
   discount_amount?: number;
   card_id?: string | null;
   payment_method?: string | null;
+  installment_group_id?: string | null;
+  installment_number?: number | null;
+  installment_total?: number | null;
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -69,6 +82,7 @@ type SortOption =
 interface TransactionListProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
+  onDeleteInstallmentGroup?: (groupId: string) => Promise<any> | any;
   onUpdate: (id: string, updates: Partial<Transaction>) => void;
   onEdit: (transaction: Transaction) => void;
   onDeleteAllRecurring: (transaction: Transaction) => void;
@@ -77,7 +91,17 @@ interface TransactionListProps {
   selectedTagId?: string | null; // Tag selecionada para filtro
 }
 
-const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple, onTagFilter, selectedTagId }: TransactionListProps) => {
+const TransactionList = ({
+  transactions,
+  onDelete,
+  onDeleteInstallmentGroup,
+  onUpdate,
+  onEdit,
+  onDeleteAllRecurring,
+  onDeleteMultiple,
+  onTagFilter,
+  selectedTagId,
+}: TransactionListProps) => {
   const [sortOption, setSortOption] = useState<SortOption>("date-desc");
   const { tags, loading: tagsLoading } = useTags();
   const { cards } = useCards();
@@ -92,6 +116,16 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
     isOpen: boolean;
     transaction: Transaction | null;
   }>({ isOpen: false, transaction: null });
+
+  const [installmentToDelete, setInstallmentToDelete] = useState<Transaction | null>(null);
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    if (transaction.installment_group_id && (transaction.installment_total || 0) > 1) {
+      setInstallmentToDelete(transaction);
+    } else {
+      onDelete(transaction.id);
+    }
+  };
 
   // Lógica de ordenação
   const sortedTransactions = useMemo(() => {
@@ -436,7 +470,14 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-foreground text-sm truncate">{transaction.description}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-foreground text-sm truncate">{transaction.description}</h4>
+                    {transaction.installment_total && transaction.installment_total > 1 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal shrink-0">
+                        {transaction.installment_number || 1}/{transaction.installment_total}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <Badge 
                       variant="secondary" 
@@ -544,7 +585,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onDelete(transaction.id)}
+                    onClick={() => handleDeleteClick(transaction)}
                     className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                     title="Excluir transação"
                   >
@@ -596,7 +637,14 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
 
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    <h4 className="font-semibold text-foreground text-base">{transaction.description}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-foreground text-base">{transaction.description}</h4>
+                      {transaction.installment_total && transaction.installment_total > 1 && (
+                        <Badge variant="outline" className="text-xs px-2 py-0.5 font-normal">
+                          {transaction.installment_number || 1}/{transaction.installment_total}
+                        </Badge>
+                      )}
+                    </div>
                     <Badge 
                       variant="secondary" 
                       className="text-xs font-medium bg-card text-secondary border-0"
@@ -703,7 +751,7 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onDelete(transaction.id)}
+                  onClick={() => handleDeleteClick(transaction)}
                   className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                   title="Excluir transação"
                 >
@@ -755,6 +803,47 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
         onConfirm={handleAbatementConfirm}
         transaction={abatementModal.transaction}
       />
+
+      {/* Diálogo de confirmação para exclusão de compra parcelada */}
+      <AlertDialog open={!!installmentToDelete} onOpenChange={(open) => !open && setInstallmentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir compra parcelada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta transação é a parcela {installmentToDelete?.installment_number || 1} de {installmentToDelete?.installment_total || 1}. Como deseja prosseguir com a exclusão?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setInstallmentToDelete(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (installmentToDelete) {
+                  onDelete(installmentToDelete.id);
+                  setInstallmentToDelete(null);
+                }
+              }}
+            >
+              Só esta parcela
+            </Button>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              onClick={async () => {
+                if (installmentToDelete?.installment_group_id) {
+                  if (onDeleteInstallmentGroup) {
+                    await onDeleteInstallmentGroup(installmentToDelete.installment_group_id);
+                  }
+                  setInstallmentToDelete(null);
+                }
+              }}
+            >
+              Esta e as seguintes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

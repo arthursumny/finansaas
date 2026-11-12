@@ -11,8 +11,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { Transaction } from "@/hooks/useTransactions";
+import { cn, formatCurrency } from "@/lib/utils";
+import { Transaction, useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useTags, TagFormData } from "@/hooks/useTags";
 import { useCards } from "@/hooks/useCards";
@@ -33,6 +33,7 @@ interface TransactionFormData {
   card_id?: string | null;
   payment_method?: string | null;
   tag_ids?: string[];
+  installments?: number;
 }
 
 interface TransactionFormProps {
@@ -43,10 +44,14 @@ interface TransactionFormProps {
 }
 
 const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
+  const { addInstallments } = useTransactions();
   const { getCategoryNamesByType, loading: categoriesLoading } = useCategories();
   const { tags, loading: tagsLoading, addTag } = useTags();
   const { cards, loading: cardsLoading } = useCards();
   const activeCards = cards.filter(c => c.is_active);
+
+  const [installments, setInstallments] = useState<number>(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
     return initialData?.tags?.map(tag => tag.id) || [];
@@ -180,15 +185,36 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     return parseFloat(cleanValue) || 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Converte o valor string para número usando a nova lógica
     const amount = parseAmountString(amountString);
     
     if (formData.description && amount > 0 && formData.category) {
+      if (!isEditing && formData.type === "expense" && formData.card_id && installments > 1) {
+        setIsSubmitting(true);
+        try {
+          await addInstallments({
+            description: formData.description.trim(),
+            amount,
+            date: formData.date,
+            type: "expense",
+            category: formData.category,
+            status: formData.status,
+            card_id: formData.card_id,
+            payment_method: formData.payment_method || "credit",
+            installments,
+          });
+          onClose();
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
       // Se estiver editando, remove os campos de recorrência para evitar duplicação
-      const submitData = { ...formData, amount, tag_ids: selectedTagIds };
+      const submitData = { ...formData, amount, tag_ids: selectedTagIds, installments };
       if (isEditing) {
         delete submitData.is_recurring;
         delete submitData.recurrence_type;
@@ -498,8 +524,53 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
               </div>
             </div>
 
+            {/* Aviso de Parcela ao Editar */}
+            {isEditing && initialData?.installment_group_id && (
+              <div className="p-3 bg-muted/60 border rounded-lg flex items-center justify-between text-sm">
+                <span className="font-medium text-foreground">Compra Parcelada</span>
+                <Badge variant="secondary" className="font-normal text-xs">
+                  Parcela {initialData.installment_number || 1} de {initialData.installment_total || 1}
+                </Badge>
+              </div>
+            )}
+
+            {/* Campo de Parcelamento */}
+            {!isEditing && formData.type === "expense" && formData.card_id && (
+              <div className="space-y-2 p-3 bg-muted/30 border rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium text-foreground">Parcelas</Label>
+                    <Select
+                      value={String(installments)}
+                      onValueChange={(val) => setInstallments(Number(val))}
+                    >
+                      <SelectTrigger className="h-10 w-full sm:w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n}x
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="sm:text-right pt-1 sm:pt-0">
+                    <div className="text-xs text-muted-foreground font-medium">
+                      {installments > 1 ? "Valor por parcela" : "Pagamento à vista"}
+                    </div>
+                    <div className="text-sm font-semibold text-primary">
+                      {installments}x de {formatCurrency(installments > 0 ? parseAmountString(amountString) / installments : 0)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Recorrência */}
-            <div className="space-y-4">
+            {(!formData.card_id || installments === 1) && (
+              <div className="space-y-4">
                 <div className="flex items-center justify-between py-2">
                   <Label htmlFor="recurring" className="text-sm font-medium text-foreground">Transação recorrente</Label>
                   <Switch
@@ -592,6 +663,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   </div>
                 )}
               </div>
+            )}
 
             {/* Botões */}
             <div className="flex gap-3 pt-6">
@@ -606,9 +678,10 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
               <Button 
                 type="submit" 
                 variant={formData.type === "income" ? "income" : "expense"}
+                disabled={isSubmitting}
                 className="flex-1 h-11 font-medium"
               >
-                Salvar
+                {isSubmitting ? "Salvando..." : "Salvar"}
               </Button>
             </div>
           </form>

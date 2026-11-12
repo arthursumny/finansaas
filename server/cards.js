@@ -136,7 +136,7 @@ export function getCardInvoiceDetails(db, card, referenceMonth) {
   const cycle = computeInvoiceCycle(card.closing_day, card.due_day, referenceMonth);
 
   const txs = db.prepare(`
-    SELECT id, description, amount, date, category, status
+    SELECT id, description, amount, date, category, status, installment_number, installment_total
     FROM transactions
     WHERE card_id = ?
       AND user_id = ?
@@ -323,6 +323,98 @@ export function registerCardRoutes(app, { db, requireUser, requireSession }) {
       res.json(invoices);
     } catch (error) {
       res.status(500).json({ error: { message: error.message || "Erro ao obter histórico de faturas." } });
+    }
+  });
+
+  // POST /api/cards/:id/invoice/:month/pay
+  app.post("/api/cards/:id/invoice/:month/pay", requireUser, requireSession, (req, res) => {
+    try {
+      const card = db.prepare("SELECT * FROM cards WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+      if (!card) {
+        return res.status(404).json({ error: { message: "Cartão não encontrado." } });
+      }
+
+      const month = req.params.month;
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: { message: "Mês inválido. Formato esperado: YYYY-MM." } });
+      }
+      const m = parseInt(month.split("-")[1], 10);
+      if (m < 1 || m > 12) {
+        return res.status(400).json({ error: { message: "Mês inválido. Deve estar entre 01 e 12." } });
+      }
+
+      const cycle = computeInvoiceCycle(card.closing_day, card.due_day, month);
+
+      const txs = db.prepare(`
+        SELECT id, amount FROM transactions
+        WHERE card_id = ?
+          AND user_id = ?
+          AND type = 'expense'
+          AND status = 'pending'
+          AND substr(date, 1, 10) > ?
+          AND substr(date, 1, 10) <= ?
+      `).all(card.id, req.user.id, cycle.cycleStart, cycle.cycleEnd);
+
+      const total_paid = Math.round(txs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0) * 100) / 100;
+      const nowIso = new Date().toISOString();
+
+      const result = db.prepare(`
+        UPDATE transactions
+        SET status = 'paid', updated_at = ?
+        WHERE card_id = ?
+          AND user_id = ?
+          AND type = 'expense'
+          AND status = 'pending'
+          AND substr(date, 1, 10) > ?
+          AND substr(date, 1, 10) <= ?
+      `).run(nowIso, card.id, req.user.id, cycle.cycleStart, cycle.cycleEnd);
+
+      res.json({
+        updated: result.changes,
+        total_paid,
+        reference_month: month,
+      });
+    } catch (error) {
+      res.status(500).json({ error: { message: error.message || "Erro ao pagar fatura." } });
+    }
+  });
+
+  // POST /api/cards/:id/invoice/:month/unpay
+  app.post("/api/cards/:id/invoice/:month/unpay", requireUser, requireSession, (req, res) => {
+    try {
+      const card = db.prepare("SELECT * FROM cards WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+      if (!card) {
+        return res.status(404).json({ error: { message: "Cartão não encontrado." } });
+      }
+
+      const month = req.params.month;
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: { message: "Mês inválido. Formato esperado: YYYY-MM." } });
+      }
+      const m = parseInt(month.split("-")[1], 10);
+      if (m < 1 || m > 12) {
+        return res.status(400).json({ error: { message: "Mês inválido. Deve estar entre 01 e 12." } });
+      }
+
+      const cycle = computeInvoiceCycle(card.closing_day, card.due_day, month);
+      const nowIso = new Date().toISOString();
+
+      const result = db.prepare(`
+        UPDATE transactions
+        SET status = 'pending', updated_at = ?
+        WHERE card_id = ?
+          AND user_id = ?
+          AND type = 'expense'
+          AND status = 'paid'
+          AND substr(date, 1, 10) > ?
+          AND substr(date, 1, 10) <= ?
+      `).run(nowIso, card.id, req.user.id, cycle.cycleStart, cycle.cycleEnd);
+
+      res.json({
+        updated: result.changes,
+      });
+    } catch (error) {
+      res.status(500).json({ error: { message: error.message || "Erro ao reabrir fatura." } });
     }
   });
 }

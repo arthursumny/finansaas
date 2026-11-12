@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, apiFetch } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 import { format } from 'date-fns';
@@ -27,10 +27,25 @@ export interface Transaction {
   discount_amount?: number;
   card_id?: string | null;
   payment_method?: string | null;
+  installment_group_id?: string | null;
+  installment_number?: number | null;
+  installment_total?: number | null;
   user_id: string;
   created_at: string;
   updated_at: string;
   tags?: Array<{ id: string; name: string; color: string }>; // Tags associadas
+}
+
+export interface AddInstallmentsData {
+  description: string;
+  amount: number;
+  date: string;
+  type?: "income" | "expense";
+  category: string;
+  status?: "paid" | "pending";
+  card_id: string;
+  payment_method?: string;
+  installments: number;
 }
 
 export const TRANSACTIONS_QUERY_KEY = ['transactions'] as const;
@@ -510,13 +525,104 @@ export const useTransactions = () => {
     }
   };
 
+  const addInstallments = async (data: AddInstallmentsData) => {
+    if (!user) return;
+
+    try {
+      const result = await apiFetch<{
+        group_id: string;
+        created: number;
+        total: number;
+        installments: Transaction[];
+      }>('/transactions/installments', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+
+      await invalidateQueries();
+
+      toast({
+        title: "Compra parcelada cadastrada",
+        description: `${data.installments} parcelas geradas com sucesso!`,
+      });
+
+      return result;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao cadastrar compra parcelada",
+        description: error.message || "Não foi possível cadastrar as parcelas.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const deleteInstallmentGroup = async (groupId: string) => {
+    if (!user || !groupId) return;
+
+    try {
+      const result = await apiFetch<{ deleted: number }>(`/transactions/installment-group/${groupId}`, {
+        method: 'DELETE',
+      });
+
+      await invalidateQueries();
+
+      toast({
+        title: "Parcelamento excluído",
+        description: "Todas as parcelas foram removidas com sucesso.",
+      });
+
+      return result;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir parcelamento",
+        description: error.message || "Não foi possível excluir o grupo de parcelas.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const updateInstallmentGroup = async (
+    groupId: string,
+    data: { description?: string; category?: string; card_id?: string; payment_method?: string }
+  ) => {
+    if (!user || !groupId) return;
+
+    try {
+      const result = await apiFetch<{ updated: number }>(`/transactions/installment-group/${groupId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+
+      await invalidateQueries();
+
+      toast({
+        title: "Parcelamento atualizado",
+        description: "As parcelas pendentes foram atualizadas com sucesso.",
+      });
+
+      return result;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar parcelamento",
+        description: error.message || "Não foi possível atualizar o grupo de parcelas.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   return {
     transactions,
     loading,
     addTransaction,
+    addInstallments,
     updateTransaction,
     deleteTransaction,
     deleteMultipleTransactions,
+    deleteInstallmentGroup,
+    updateInstallmentGroup,
     deleteAllRecurringTransactions,
     updateAllRecurringTransactions,
     refetch,

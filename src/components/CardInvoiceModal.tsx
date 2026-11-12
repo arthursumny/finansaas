@@ -1,10 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -33,6 +43,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { Card, CardInvoiceDetails, useCards } from '@/hooks/useCards';
+import { useToast } from '@/hooks/use-toast';
 
 interface CardInvoiceModalProps {
   isOpen: boolean;
@@ -47,11 +58,37 @@ export const CardInvoiceModal = ({
   card,
   initialMonth,
 }: CardInvoiceModalProps) => {
-  const { fetchInvoice, fetchInvoicesHistory } = useCards();
+  const { fetchInvoice, fetchInvoicesHistory, payInvoice, unpayInvoice } = useCards();
+  const { toast } = useToast();
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [availableMonths, setAvailableMonths] = useState<{ value: string; label: string }[]>([]);
   const [invoice, setInvoice] = useState<CardInvoiceDetails | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPayConfirmOpen, setIsPayConfirmOpen] = useState(false);
+  const [isUnpayConfirmOpen, setIsUnpayConfirmOpen] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  const isLoadingRef = useRef(false);
+  const inFlightInvoiceKeyRef = useRef<string | null>(null);
+  const historyInFlightRef = useRef<string | null>(null);
+
+  const fetchInvoiceRef = useRef(fetchInvoice);
+  fetchInvoiceRef.current = fetchInvoice;
+  const fetchInvoicesHistoryRef = useRef(fetchInvoicesHistory);
+  fetchInvoicesHistoryRef.current = fetchInvoicesHistory;
+
+  // Limpa o estado quando o modal fecha
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedMonth('');
+      setInvoice(null);
+      setAvailableMonths([]);
+      setLoading(false);
+      isLoadingRef.current = false;
+      inFlightInvoiceKeyRef.current = null;
+      historyInFlightRef.current = null;
+    }
+  }, [isOpen]);
 
   // Formata YYYY-MM para label amigável em pt-BR (ex: "Março de 2026")
   const formatMonthLabel = (ym: string) => {
@@ -77,55 +114,156 @@ export const CardInvoiceModal = ({
 
   // Carrega histórico dos últimos 12 meses para o seletor quando o modal abre
   useEffect(() => {
-    if (!isOpen || !card) return;
+    if (!isOpen || !card?.id) return;
 
     let active = true;
-    const loadHistory = async () => {
-      const history = await fetchInvoicesHistory(card.id);
-      if (!active) return;
+    const cardId = card.id;
 
-      if (history.length > 0) {
-        const options = history.map((inv) => ({
-          value: inv.reference_month,
-          label: formatMonthLabel(inv.reference_month),
-        }));
-        setAvailableMonths(options);
-        const startingMonth = initialMonth || history[0].reference_month;
-        setSelectedMonth(startingMonth);
-      } else {
-        // Fallback para o mês atual
-        const now = new Date();
-        const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        setAvailableMonths([{ value: fallback, label: formatMonthLabel(fallback) }]);
-        setSelectedMonth(initialMonth || fallback);
+    if (historyInFlightRef.current === cardId) {
+      return;
+    }
+
+    const loadHistory = async () => {
+      historyInFlightRef.current = cardId;
+      try {
+        const history = await fetchInvoicesHistoryRef.current(cardId);
+        if (!active) return;
+
+        if (history.length > 0) {
+          const options = history.map((inv) => ({
+            value: inv.reference_month,
+            label: formatMonthLabel(inv.reference_month),
+          }));
+          setAvailableMonths(options);
+          const startingMonth = initialMonth || history[0].reference_month;
+          setSelectedMonth(startingMonth);
+        } else {
+          // Fallback para o mês atual
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          setAvailableMonths([{ value: fallback, label: formatMonthLabel(fallback) }]);
+          setSelectedMonth(initialMonth || fallback);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar histórico de faturas:', err);
+        if (active) {
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          setAvailableMonths([{ value: fallback, label: formatMonthLabel(fallback) }]);
+          setSelectedMonth(initialMonth || fallback);
+        }
+      } finally {
+        historyInFlightRef.current = null;
       }
     };
 
     loadHistory();
     return () => {
       active = false;
+      historyInFlightRef.current = null;
     };
   }, [isOpen, card?.id, initialMonth]);
 
+  const reloadInvoice = useCallback(async () => {
+    if (!card?.id || !selectedMonth) return;
+    const cardId = card.id;
+    const month = selectedMonth;
+    const reqKey = `${cardId}:${month}`;
+
+    if (inFlightInvoiceKeyRef.current === reqKey) return;
+    inFlightInvoiceKeyRef.current = reqKey;
+    isLoadingRef.current = true;
+    setLoading(true);
+    try {
+      const data = await fetchInvoiceRef.current(cardId, month);
+      setInvoice(data);
+    } catch (err) {
+      console.error('Erro ao recarregar fatura:', err);
+    } finally {
+      inFlightInvoiceKeyRef.current = null;
+      isLoadingRef.current = false;
+      setLoading(false);
+    }
+  }, [card?.id, selectedMonth]);
+
   // Carrega a fatura sempre que o selectedMonth mudar
   useEffect(() => {
-    if (!isOpen || !card || !selectedMonth) return;
+    if (!isOpen || !card?.id || !selectedMonth) return;
 
     let active = true;
+    const cardId = card.id;
+    const month = selectedMonth;
+    const reqKey = `${cardId}:${month}`;
+
+    if (inFlightInvoiceKeyRef.current === reqKey) return;
+
     const loadInvoice = async () => {
+      inFlightInvoiceKeyRef.current = reqKey;
+      isLoadingRef.current = true;
       setLoading(true);
-      const data = await fetchInvoice(card.id, selectedMonth);
-      if (active) {
-        setInvoice(data);
-        setLoading(false);
+      try {
+        const data = await fetchInvoiceRef.current(cardId, month);
+        if (active) {
+          setInvoice(data);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar fatura:', err);
+      } finally {
+        if (inFlightInvoiceKeyRef.current === reqKey) {
+          inFlightInvoiceKeyRef.current = null;
+          isLoadingRef.current = false;
+        }
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     loadInvoice();
     return () => {
       active = false;
+      if (inFlightInvoiceKeyRef.current === reqKey) {
+        inFlightInvoiceKeyRef.current = null;
+        isLoadingRef.current = false;
+      }
     };
   }, [isOpen, card?.id, selectedMonth]);
+
+  const handleConfirmPay = async () => {
+    if (!card || !selectedMonth || !invoice) return;
+    setIsActionLoading(true);
+    try {
+      await payInvoice(card.id, selectedMonth);
+      toast({
+        title: "Fatura paga",
+        description: `Fatura de ${formatMonthLabel(selectedMonth)} paga com sucesso!`,
+      });
+      setIsPayConfirmOpen(false);
+      await reloadInvoice();
+    } catch {
+      // Toast já tratado no hook
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleConfirmUnpay = async () => {
+    if (!card || !selectedMonth) return;
+    setIsActionLoading(true);
+    try {
+      await unpayInvoice(card.id, selectedMonth);
+      toast({
+        title: "Fatura reaberta",
+        description: `Fatura de ${formatMonthLabel(selectedMonth)} reaberta com sucesso.`,
+      });
+      setIsUnpayConfirmOpen(false);
+      await reloadInvoice();
+    } catch {
+      // Toast já tratado no hook
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   if (!card) return null;
 
@@ -289,6 +427,11 @@ export const CardInvoiceModal = ({
                           </TableCell>
                           <TableCell className="font-medium text-sm">
                             {tx.description}
+                            {tx.installment_total && tx.installment_total > 1 && !tx.description.includes(`(${tx.installment_number}/${tx.installment_total})`) && (
+                              <span className="text-muted-foreground ml-1.5 text-xs font-normal">
+                                ({tx.installment_number || 1}/{tx.installment_total})
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
                             {tx.category}
@@ -316,14 +459,84 @@ export const CardInvoiceModal = ({
               )}
             </div>
 
-            <div className="flex justify-end pt-2">
-              <Button variant="outline" onClick={onClose}>
-                Fechar
-              </Button>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+              <div>
+                {invoice.pending_total === 0 && invoice.transactions.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setIsUnpayConfirmOpen(true)}
+                    disabled={isActionLoading}
+                  >
+                    Reabrir fatura
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button variant="outline" onClick={onClose} disabled={isActionLoading}>
+                  Fechar
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                  disabled={invoice.pending_total <= 0 || isActionLoading}
+                  onClick={() => setIsPayConfirmOpen(true)}
+                >
+                  Pagar fatura
+                </Button>
+              </div>
             </div>
           </div>
         )}
       </DialogContent>
+
+      {/* Confirmação de Pagamento da Fatura */}
+      <AlertDialog open={isPayConfirmOpen} onOpenChange={setIsPayConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar pagamento da fatura</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirma o pagamento de <strong className="text-foreground">{invoice ? formatCurrency(invoice.pending_total) : ""}</strong> referente à fatura de <strong className="text-foreground">{formatMonthLabel(selectedMonth)}</strong> do cartão {card.name}?
+              Todos os lançamentos pendentes serão marcados como pagos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isActionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isActionLoading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleConfirmPay}
+            >
+              {isActionLoading ? "Processando..." : "Confirmar Pagamento"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmação de Reabertura da Fatura */}
+      <AlertDialog open={isUnpayConfirmOpen} onOpenChange={setIsUnpayConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir fatura</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja reabrir a fatura de <strong className="text-foreground">{formatMonthLabel(selectedMonth)}</strong> do cartão {card.name}?
+              Todos os lançamentos desta fatura voltarão para o status pendente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isActionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isActionLoading}
+              onClick={handleConfirmUnpay}
+            >
+              {isActionLoading ? "Processando..." : "Reabrir Fatura"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

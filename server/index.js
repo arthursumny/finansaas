@@ -8,6 +8,7 @@ import fs from "node:fs";
 import { createPublicApiRouter } from "./public-api.js";
 import { accountConfirmationTemplate, emailConfirmationTemplate, isEmailEnabled, passwordResetTemplate, sendEmail } from "./email.js";
 import { registerCardRoutes } from "./cards.js";
+import { registerInstallmentRoutes } from "./installments.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.DATA_DIR || `${__dirname}/../data`;
@@ -278,6 +279,9 @@ function initSchema() {
       subscription_id TEXT,
       card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
       payment_method TEXT,
+      installment_group_id TEXT,
+      installment_number INTEGER,
+      installment_total INTEGER,
       created_at TEXT,
       updated_at TEXT
     );
@@ -409,7 +413,17 @@ function initSchema() {
   if (!transactionColumns.includes("payment_method")) {
     db.exec("ALTER TABLE transactions ADD COLUMN payment_method TEXT");
   }
+  if (!transactionColumns.includes("installment_group_id")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN installment_group_id TEXT");
+  }
+  if (!transactionColumns.includes("installment_number")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN installment_number INTEGER");
+  }
+  if (!transactionColumns.includes("installment_total")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN installment_total INTEGER");
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_card_id ON transactions(card_id);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_installment_group ON transactions(installment_group_id);");
 
   cleanupExpiredSessions();
 
@@ -1214,6 +1228,7 @@ app.post("/api/query", requireUser, requireSession, (req, res) => {
 });
 
 registerCardRoutes(app, { db, requireUser, requireSession });
+registerInstallmentRoutes(app, { db, requireUser, requireSession });
 
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: { code: "not_found", message: "Rota não encontrada." } });
