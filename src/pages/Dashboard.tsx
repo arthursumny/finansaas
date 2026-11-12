@@ -87,6 +87,25 @@ const Dashboard = () => {
   const totalOpenInvoices = useMemo(() => {
     return activeCardSummaries.reduce((sum, c) => sum + (c.current_invoice?.total || 0), 0);
   }, [activeCardSummaries]);
+  const closingSoonCards = useMemo(() => {
+    return activeCardSummaries.filter(c => c.closing_soon);
+  }, [activeCardSummaries]);
+  const todayKeyStr = format(new Date(), 'yyyy-MM-dd');
+  const [closingAlertDismissed, setClosingAlertDismissed] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && sessionStorage.getItem(`finansaas_dismiss_closing_${format(new Date(), 'yyyy-MM-dd')}`) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissClosingAlert = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      sessionStorage.setItem(`finansaas_dismiss_closing_${todayKeyStr}`, '1');
+    } catch {}
+    setClosingAlertDismissed(true);
+  };
   const [showCharts, setShowCharts] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -913,13 +932,61 @@ const Dashboard = () => {
                   <CreditCard className="h-3 w-3 sm:h-5 sm:w-5" />
                 </div>
               </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <div className="text-base sm:text-2xl font-semibold text-foreground">
-                  {formatCurrency(totalOpenInvoices)}
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6 space-y-2">
+                <div>
+                  <div className="text-base sm:text-2xl font-semibold text-foreground">
+                    {formatCurrency(totalOpenInvoices)}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {activeCardSummaries.length} {activeCardSummaries.length === 1 ? 'cartão ativo' : 'cartões ativos'}
+                  </p>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  {activeCardSummaries.length} {activeCardSummaries.length === 1 ? 'cartão ativo' : 'cartões ativos'}
-                </p>
+
+                {!closingAlertDismissed && closingSoonCards.length > 0 && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="pt-2 border-t border-border/60 text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        Aviso de fechamento
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDismissClosingAlert}
+                        className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                        title="Ocultar hoje"
+                      >
+                        Ocultar
+                      </Button>
+                    </div>
+                    <div className="space-y-1">
+                      {closingSoonCards.map((card) => {
+                        const isToday = card.days_until_closing === 0;
+                        return (
+                          <div
+                            key={card.id}
+                            className={`flex items-center justify-between px-2 py-1 rounded text-[11px] ${
+                              isToday
+                                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300 font-semibold border border-amber-500/30'
+                                : 'bg-muted/60 text-muted-foreground'
+                            }`}
+                          >
+                            <span className="truncate mr-1">{card.name}</span>
+                            <span className="shrink-0 font-medium">
+                              {isToday
+                                ? 'Fecha hoje'
+                                : `Fecha em ${card.days_until_closing} ${card.days_until_closing === 1 ? 'dia' : 'dias'}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

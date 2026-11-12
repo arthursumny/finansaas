@@ -16,8 +16,19 @@ export interface Card {
   due_day: number;
   color: string;
   is_active: boolean;
+  min_payment_percent?: number;
+  parent_card_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CardInvoicePayment {
+  id: string;
+  user_id: string;
+  card_id: string;
+  reference_month: string;
+  amount: number;
+  created_at: string;
 }
 
 export interface CardInvoiceSummary {
@@ -28,6 +39,12 @@ export interface CardInvoiceSummary {
   total: number;
   paid_total: number;
   pending_total: number;
+  paid?: number;
+  pending?: number;
+  status?: 'paid' | 'partial' | 'open';
+  min_payment_percent?: number;
+  minimum_payment?: number;
+  minimum_remaining?: number;
   transactions_count: number;
 }
 
@@ -37,6 +54,11 @@ export interface CardSummary extends Card {
   usage_percent: number;
   current_invoice: CardInvoiceSummary;
   next_invoice_total: number;
+  next_closing_date?: string;
+  days_until_closing?: number;
+  closing_soon?: boolean;
+  shared_with_parent?: boolean;
+  parent_card_name?: string | null;
 }
 
 export interface CardFormData {
@@ -47,6 +69,8 @@ export interface CardFormData {
   due_day: number;
   color?: string;
   is_active?: boolean;
+  min_payment_percent?: number;
+  parent_card_id?: string | null;
 }
 
 export interface InvoiceTransaction {
@@ -59,11 +83,15 @@ export interface InvoiceTransaction {
   installment_number?: number | null;
   installment_total?: number | null;
   installment_group_id?: string | null;
+  card_id?: string | null;
+  card_name?: string | null;
 }
 
 export interface CardInvoiceDetails extends CardInvoiceSummary {
   card?: Card;
   transactions: InvoiceTransaction[];
+  payments?: CardInvoicePayment[];
+  cards_included?: { id: string; name: string }[];
 }
 
 export const CARDS_QUERY_KEY = ['cards'] as const;
@@ -234,9 +262,12 @@ export const useCards = () => {
     }
   }, [user, queryClient, toast]);
 
-  const fetchInvoice = useCallback(async (cardId: string, month?: string): Promise<CardInvoiceDetails | null> => {
+  const fetchInvoice = useCallback(async (cardId: string, month?: string, includeAdditional?: boolean): Promise<CardInvoiceDetails | null> => {
     try {
-      const query = month ? `?month=${encodeURIComponent(month)}` : '';
+      const params = new URLSearchParams();
+      if (month) params.set('month', month);
+      if (includeAdditional !== undefined) params.set('include_additional', includeAdditional ? '1' : '0');
+      const query = params.toString() ? `?${params.toString()}` : '';
       const res = await apiFetch<CardInvoiceDetails>(`/cards/${cardId}/invoice${query}`);
       return res;
     } catch (error: any) {
@@ -245,9 +276,12 @@ export const useCards = () => {
     }
   }, []);
 
-  const fetchInvoicesHistory = useCallback(async (cardId: string): Promise<CardInvoiceSummary[]> => {
+  const fetchInvoicesHistory = useCallback(async (cardId: string, includeAdditional?: boolean): Promise<CardInvoiceSummary[]> => {
     try {
-      const res = await apiFetch<CardInvoiceSummary[]>(`/cards/${cardId}/invoices`);
+      const params = new URLSearchParams();
+      if (includeAdditional !== undefined) params.set('include_additional', includeAdditional ? '1' : '0');
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await apiFetch<CardInvoiceSummary[]>(`/cards/${cardId}/invoices${query}`);
       return Array.isArray(res) ? res : [];
     } catch (error: any) {
       console.error('Erro ao buscar histórico de faturas:', error);
@@ -257,7 +291,7 @@ export const useCards = () => {
 
   const payInvoice = useCallback(async (cardId: string, month: string) => {
     try {
-      const res = await apiFetch<{ updated: number; total_paid: number; reference_month: string }>(
+      const res = await apiFetch<{ updated: number; total_paid: number; reference_month: string; pending: number }>(
         `/cards/${cardId}/invoice/${encodeURIComponent(month)}/pay`,
         { method: 'POST' }
       );
@@ -276,9 +310,54 @@ export const useCards = () => {
     }
   }, [queryClient, toast]);
 
+  const payMinimumInvoice = useCallback(async (cardId: string, month: string, amount?: number) => {
+    try {
+      const res = await apiFetch<{ paid: number; pending: number; amount: number }>(
+        `/cards/${cardId}/invoice/${encodeURIComponent(month)}/pay-minimum`,
+        {
+          method: 'POST',
+          body: amount !== undefined ? JSON.stringify({ amount }) : undefined,
+        }
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      ]);
+      return res;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao pagar mínimo da fatura",
+        description: error.message || "Não foi possível registrar o pagamento mínimo.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  }, [queryClient, toast]);
+
+  const deleteInvoicePayment = useCallback(async (cardId: string, month: string, paymentId: string) => {
+    try {
+      const res = await apiFetch<{ ok: boolean; deleted: string; pending: number; paid: number }>(
+        `/cards/${cardId}/invoice/${encodeURIComponent(month)}/payments/${paymentId}`,
+        { method: 'DELETE' }
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      ]);
+      return res;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover pagamento",
+        description: error.message || "Não foi possível remover o pagamento parcial.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  }, [queryClient, toast]);
+
   const unpayInvoice = useCallback(async (cardId: string, month: string) => {
     try {
-      const res = await apiFetch<{ updated: number }>(
+      const res = await apiFetch<{ updated: number; reverted: number; pending: number }>(
         `/cards/${cardId}/invoice/${encodeURIComponent(month)}/unpay`,
         { method: 'POST' }
       );
@@ -309,6 +388,8 @@ export const useCards = () => {
     fetchInvoice,
     fetchInvoicesHistory,
     payInvoice,
+    payMinimumInvoice,
+    deleteInvoicePayment,
     unpayInvoice,
     refetch,
   };

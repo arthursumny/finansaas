@@ -123,6 +123,7 @@ const userScopedTables = new Set([
   "api_tokens",
   "budgets",
   "cards",
+  "card_invoice_payments",
   "categories",
   "goals",
   "profiles",
@@ -135,6 +136,7 @@ const clientTables = new Set([
   "api_tokens",
   "budgets",
   "cards",
+  "card_invoice_payments",
   "categories",
   "goals",
   "profiles",
@@ -252,10 +254,24 @@ function initSchema() {
       due_day INTEGER NOT NULL DEFAULT 10,
       color TEXT DEFAULT '#6366f1',
       is_active INTEGER NOT NULL DEFAULT 1,
+      min_payment_percent REAL NOT NULL DEFAULT 15,
+      parent_card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
       created_at TEXT,
       updated_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cards_parent_card_id ON cards(parent_card_id);
+
+    CREATE TABLE IF NOT EXISTS card_invoice_payments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+      reference_month TEXT NOT NULL,
+      amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cip_card_month ON card_invoice_payments(card_id, reference_month);
+    CREATE INDEX IF NOT EXISTS idx_cip_user_id ON card_invoice_payments(user_id);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id TEXT PRIMARY KEY,
@@ -425,10 +441,21 @@ function initSchema() {
   db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_card_id ON transactions(card_id);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_installment_group ON transactions(installment_group_id);");
 
+  const cardColumns = db.prepare("PRAGMA table_info(cards)").all().map((column) => column.name);
+  if (!cardColumns.includes("min_payment_percent")) {
+    db.exec("ALTER TABLE cards ADD COLUMN min_payment_percent REAL NOT NULL DEFAULT 15");
+  }
+  if (!cardColumns.includes("parent_card_id")) {
+    db.exec("ALTER TABLE cards ADD COLUMN parent_card_id TEXT REFERENCES cards(id) ON DELETE SET NULL");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_cards_parent_card_id ON cards(parent_card_id);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_cip_card_month ON card_invoice_payments(card_id, reference_month);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_cip_user_id ON card_invoice_payments(user_id);");
+
   cleanupExpiredSessions();
 
   for (const table of [
-    "api_tokens", "budgets", "cards", "categories", "goals", "profiles", "subscriptions",
+    "api_tokens", "budgets", "cards", "card_invoice_payments", "categories", "goals", "profiles", "subscriptions",
     "subscription_tags", "tags", "transactions", "transaction_tags", "users",
   ]) {
     tableColumns.set(table, new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name)));
@@ -658,6 +685,25 @@ function insertRows(table, values, options = {}, user) {
       const row = pickWritable(table, value, "insert");
       if (columns.has("user_id")) row.user_id = user.id;
       if (table === "profiles") row.id = user.id;
+
+      if (table === "cards") {
+        if (row.parent_card_id) {
+          const parent = db.prepare("SELECT * FROM cards WHERE id = ? AND user_id = ?").get(row.parent_card_id, user.id);
+          if (!parent) throw new Error("Cartão titular não encontrado.");
+          if (parent.parent_card_id) throw new Error("Um cartão adicional não pode ter como titular outro cartão adicional.");
+          row.limit_amount = parent.limit_amount;
+          row.closing_day = parent.closing_day;
+          row.due_day = parent.due_day;
+          row.min_payment_percent = parent.min_payment_percent ?? 15;
+        } else {
+          if (row.min_payment_percent === undefined || row.min_payment_percent === null || isNaN(row.min_payment_percent)) {
+            row.min_payment_percent = 15;
+          } else {
+            row.min_payment_percent = Math.max(0, Math.min(100, Number(row.min_payment_percent)));
+          }
+        }
+      }
+
       assertOwnedRelation(table, row, user);
       const keys = Object.keys(row).filter((key) => columns.has(key));
       const placeholders = keys.map(() => "?").join(", ");
@@ -673,14 +719,71 @@ function insertRows(table, values, options = {}, user) {
 }
 
 function updateRows(table, values, filters, user) {
-  const params = [];
+  const matching = selectRows(table, { filters, orders: [] }, user);
+  if (matching.length === 0) return [];
+
   const row = pickWritable(table, values, "update");
   delete row.id;
   delete row.user_id;
 
-  const keys = Object.keys(row);
-  if (keys.length === 0) return [];
+  if (table === "cards") {
+    if (row.min_payment_percent !== undefined) {
+      row.min_payment_percent = Math.max(0, Math.min(100, Number(row.min_payment_percent) || 0));
+    }
 
+    if (row.parent_card_id !== undefined) {
+      if (row.parent_card_id) {
+        for (const card of matching) {
+          if (row.parent_card_id === card.id) {
+            throw new Error("Um cartão não pode ser adicional de si mesmo.");
+          }
+          const parent = db.prepare("SELECT * FROM cards WHERE id = ? AND user_id = ?").get(row.parent_card_id, user.id);
+          if (!parent) throw new Error("Cartão titular não encontrado.");
+          if (parent.parent_card_id) throw new Error("Um cartão adicional não pode ter como titular outro cartão adicional.");
+          const hasChildren = db.prepare("SELECT 1 FROM cards WHERE parent_card_id = ? AND user_id = ?").get(card.id, user.id);
+          if (hasChildren) throw new Error("Um cartão titular que possui adicionais não pode se tornar adicional.");
+          row.limit_amount = parent.limit_amount;
+          row.closing_day = parent.closing_day;
+          row.due_day = parent.due_day;
+          row.min_payment_percent = parent.min_payment_percent ?? 15;
+        }
+      }
+    } else {
+      for (const card of matching) {
+        if (card.parent_card_id) {
+          const parent = db.prepare("SELECT * FROM cards WHERE id = ? AND user_id = ?").get(card.parent_card_id, user.id);
+          if (parent) {
+            row.limit_amount = parent.limit_amount;
+            row.closing_day = parent.closing_day;
+            row.due_day = parent.due_day;
+            row.min_payment_percent = parent.min_payment_percent ?? 15;
+          }
+        }
+      }
+    }
+
+    const propagated = {};
+    if (row.limit_amount !== undefined) propagated.limit_amount = row.limit_amount;
+    if (row.closing_day !== undefined) propagated.closing_day = row.closing_day;
+    if (row.due_day !== undefined) propagated.due_day = row.due_day;
+    if (row.min_payment_percent !== undefined) propagated.min_payment_percent = row.min_payment_percent;
+
+    if (Object.keys(propagated).length > 0) {
+      const propKeys = Object.keys(propagated).map(quoteIdentifier).map((k) => `${k} = ?`).join(", ");
+      const propVals = Object.values(propagated);
+      for (const card of matching) {
+        if (!card.parent_card_id) {
+          db.prepare(`UPDATE cards SET ${propKeys}, updated_at = ? WHERE parent_card_id = ? AND user_id = ?`)
+            .run(...propVals, now(), card.id, user.id);
+        }
+      }
+    }
+  }
+
+  const keys = Object.keys(row);
+  if (keys.length === 0) return matching;
+
+  const params = [];
   const setSql = keys.map((key) => `${quoteIdentifier(key)} = ?`).join(", ");
   const setParams = keys.map((key) => row[key]);
   const where = buildWhere(table, filters, params, user);
@@ -1212,6 +1315,10 @@ app.post("/api/query", requireUser, requireSession, (req, res) => {
     const { table, action, values, filters = [], orders = [], select = "", single = false, maybeSingle = false, limit, options = {} } = req.body;
     if (!clientTables.has(table)) return res.status(400).json({ error: { message: `Tabela inválida: ${table}` } });
 
+    if (table === "card_invoice_payments" && action !== "select") {
+      return res.status(403).json({ error: { message: "Escrita direta em card_invoice_payments não permitida." } });
+    }
+
     let data;
     if (action === "select") data = selectRows(table, { filters, orders, select, limit }, req.user);
     else if (action === "insert") data = withRelations(table, insertRows(table, values, options, req.user), select);
@@ -1223,7 +1330,8 @@ app.post("/api/query", requireUser, requireSession, (req, res) => {
     res.json({ data });
   } catch (error) {
     const message = String(error.message || error);
-    res.status(message.includes("UNIQUE") ? 409 : 500).json({ error: { message } });
+    const isBadRequest = message.includes("adicional") || message.includes("titular") || message.includes("inválid");
+    res.status(message.includes("UNIQUE") ? 409 : isBadRequest ? 400 : 500).json({ error: { message } });
   }
 });
 

@@ -177,16 +177,43 @@ export const CardManager = ({ onBack }: CardManagerProps) => {
                         <CreditCard className="w-5 h-5" />
                       </div>
                       <div>
-                        <CardTitle className="text-base font-semibold leading-tight text-foreground group-hover:text-primary transition-colors">
-                          {cardItem.name}
-                        </CardTitle>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <CardTitle className="text-base font-semibold leading-tight text-foreground group-hover:text-primary transition-colors">
+                            {cardItem.name}
+                          </CardTitle>
+                          {cardItem.parent_card_id && (
+                            <Badge variant="outline" className="text-[10px] uppercase font-semibold text-primary border-primary/30">
+                              ADICIONAL
+                            </Badge>
+                          )}
+                          {cardItem.closing_soon && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-medium ${
+                                cardItem.days_until_closing === 0
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 font-semibold'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                              }`}
+                            >
+                              {cardItem.days_until_closing === 0
+                                ? 'Fecha hoje'
+                                : `Fecha em ${cardItem.days_until_closing} ${cardItem.days_until_closing === 1 ? 'dia' : 'dias'}`}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <Badge variant="outline" className="text-[10px] uppercase font-medium">
                             {cardItem.brand}
                           </Badge>
-                          <span className="text-[11px] text-muted-foreground">
-                            Fecha dia {cardItem.closing_day} • Vence dia {cardItem.due_day}
-                          </span>
+                          {cardItem.parent_card_id ? (
+                            <span className="text-[11px] text-muted-foreground font-medium">
+                              do cartão {cardItem.parent_card_name || 'titular'}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">
+                              Fecha dia {cardItem.closing_day} • Vence dia {cardItem.due_day}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -292,14 +319,29 @@ export const CardManager = ({ onBack }: CardManagerProps) => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Cartão de Crédito</AlertDialogTitle>
+            <AlertDialogTitle>
+              {deleteDialog.card?.parent_card_id ? 'Excluir Cartão Adicional' : 'Excluir Cartão de Crédito'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o cartão{' '}
-              <strong>"{deleteDialog.card?.name}"</strong>?
-              <br />
-              <br />
-              As transações vinculadas a este cartão <strong>NÃO</strong> serão apagadas, mas
-              ficarão desvinculadas (sem cartão).
+              {deleteDialog.card?.parent_card_id ? (
+                <>
+                  Tem certeza que deseja excluir o cartão adicional{' '}
+                  <strong>"{deleteDialog.card?.name}"</strong>?
+                  <br />
+                  <br />
+                  As transações vinculadas a este cartão <strong>NÃO</strong> serão apagadas, mas
+                  ficarão desvinculadas (sem cartão).
+                </>
+              ) : (
+                <>
+                  Tem certeza que deseja excluir o cartão{' '}
+                  <strong>"{deleteDialog.card?.name}"</strong>?
+                  <br />
+                  <br />
+                  As transações vinculadas a este cartão <strong>NÃO</strong> serão apagadas, mas
+                  ficarão desvinculadas (sem cartão). Cartões adicionais vinculados se tornarão cartões normais independentes.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
