@@ -20,9 +20,11 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Tag as TagIcon
+  Tag as TagIcon,
+  CreditCard
 } from "lucide-react";
 import { useTags } from "@/hooks/useTags";
+import { useCards } from "@/hooks/useCards";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import DiscountModal from "./DiscountModal";
@@ -43,6 +45,8 @@ interface Transaction {
   recurrence_end_date?: string;
   original_amount?: number;
   discount_amount?: number;
+  card_id?: string | null;
+  payment_method?: string | null;
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -76,6 +80,8 @@ interface TransactionListProps {
 const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAllRecurring, onDeleteMultiple, onTagFilter, selectedTagId }: TransactionListProps) => {
   const [sortOption, setSortOption] = useState<SortOption>("date-desc");
   const { tags, loading: tagsLoading } = useTags();
+  const { cards } = useCards();
+  const cardMap = useMemo(() => new Map(cards.map(c => [c.id, c])), [cards]);
   
   const [discountModal, setDiscountModal] = useState<{
     isOpen: boolean;
@@ -211,10 +217,10 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
     }
   };
 
-  const handleDiscountConfirm = (originalAmount: number, paidAmount: number) => {
+  const handleDiscountConfirm = async (originalAmount: number, paidAmount: number) => {
     if (discountModal.transaction) {
       const discountAmount = originalAmount - paidAmount;
-      onUpdate(discountModal.transaction.id, {
+      await onUpdate(discountModal.transaction.id, {
         status: "paid",
         original_amount: originalAmount,
         discount_amount: discountAmount,
@@ -238,11 +244,11 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
         const futureIdsToDelete = futureTransactionIds.filter(id => id !== currentTransaction.id);
         
         if (futureIdsToDelete.length > 0) {
-          onDeleteMultiple(futureIdsToDelete);
+          await onDeleteMultiple(futureIdsToDelete);
         }
         
         // 2. Atualiza a parcela atual com o desconto e nova data
-        onUpdate(currentTransaction.id, {
+        await onUpdate(currentTransaction.id, {
           status: "paid",
           original_amount: totalAmount,
           discount_amount: discountAmount,
@@ -271,8 +277,8 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
     setAbatementModal({ isOpen: true, transaction });
   };
 
-  const handleFullDiscount = (transaction: Transaction) => {
-    onUpdate(transaction.id, {
+  const handleFullDiscount = async (transaction: Transaction) => {
+    await onUpdate(transaction.id, {
       status: "paid",
       original_amount: transaction.amount,
       discount_amount: transaction.amount,
@@ -438,6 +444,20 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                     >
                       {transaction.category}
                     </Badge>
+                    {transaction.card_id && cardMap.get(transaction.card_id) && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-medium flex items-center gap-1"
+                        style={{
+                          backgroundColor: (cardMap.get(transaction.card_id)?.color || '#6366f1') + '15',
+                          borderColor: (cardMap.get(transaction.card_id)?.color || '#6366f1') + '40',
+                          color: cardMap.get(transaction.card_id)?.color || '#6366f1',
+                        }}
+                      >
+                        <CreditCard className="w-3 h-3" />
+                        {cardMap.get(transaction.card_id)?.name}
+                      </Badge>
+                    )}
                     {transaction.is_recurring && (
                       <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Rec.
@@ -583,6 +603,20 @@ const TransactionList = ({ transactions, onDelete, onUpdate, onEdit, onDeleteAll
                     >
                       {transaction.category}
                     </Badge>
+                    {transaction.card_id && cardMap.get(transaction.card_id) && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-medium flex items-center gap-1"
+                        style={{
+                          backgroundColor: (cardMap.get(transaction.card_id)?.color || '#6366f1') + '15',
+                          borderColor: (cardMap.get(transaction.card_id)?.color || '#6366f1') + '40',
+                          color: cardMap.get(transaction.card_id)?.color || '#6366f1',
+                        }}
+                      >
+                        <CreditCard className="w-3 h-3" />
+                        {cardMap.get(transaction.card_id)?.name}
+                      </Badge>
+                    )}
                     {transaction.is_recurring && (
                       <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Recorrente

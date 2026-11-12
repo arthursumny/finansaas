@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 import { addMonths, endOfMonth, format, startOfMonth } from 'date-fns';
+import { CARDS_QUERY_KEY } from './useCards';
 
 export interface Subscription {
   id: string;
@@ -32,6 +34,7 @@ export interface SubscriptionFormData {
 }
 
 export const useSubscriptions = () => {
+  const queryClient = useQueryClient();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
@@ -347,8 +350,13 @@ export const useSubscriptions = () => {
       }
     }
 
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+    ]);
+
     return inserts.length;
-  }, [subscriptions, user]);
+  }, [subscriptions, user, queryClient]);
 
   useEffect(() => {
     if (user) {

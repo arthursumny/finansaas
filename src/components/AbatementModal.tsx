@@ -28,6 +28,8 @@ interface Transaction {
   recurrence_end_date?: string;
   original_amount?: number;
   discount_amount?: number;
+  card_id?: string | null;
+  payment_method?: string | null;
   user_id: string;
   created_at: string;
   updated_at: string;

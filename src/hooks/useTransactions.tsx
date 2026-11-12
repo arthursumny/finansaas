@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
-import { addMonths, addYears, format, isAfter, isSameDay } from 'date-fns';
+import { format } from 'date-fns';
+import { CARDS_QUERY_KEY } from './useCards';
 
 export interface Transaction {
   id: string;
@@ -23,30 +25,30 @@ export interface Transaction {
   recurrence_end_date?: string;
   original_amount?: number;
   discount_amount?: number;
+  card_id?: string | null;
+  payment_method?: string | null;
   user_id: string;
   created_at: string;
   updated_at: string;
   tags?: Array<{ id: string; name: string; color: string }>; // Tags associadas
 }
 
+export const TRANSACTIONS_QUERY_KEY = ['transactions'] as const;
+
 export const useTransactions = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const fetchRequestId = useRef(0);
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  const fetchTransactions = useCallback(async () => {
-    const requestId = fetchRequestId.current + 1;
-    fetchRequestId.current = requestId;
+  const {
+    data: transactions = [],
+    isLoading: transactionsLoading,
+    refetch: refetchQuery,
+  } = useQuery<Transaction[]>({
+    queryKey: [...TRANSACTIONS_QUERY_KEY, user?.id],
+    queryFn: async () => {
+      if (!user) return [];
 
-    if (!user) {
-      setTransactions([]);
-      setLoading(false);
-      return [];
-    }
-    
-    try {
       const { data, error } = await supabase
         .from('transactions')
         .select(`
@@ -62,34 +64,45 @@ export const useTransactions = () => {
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
-      if (error) throw error;
-      
+      if (error) {
+        toast({
+          title: "Erro ao carregar transações",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+
       // Transformar os dados para incluir tags no formato esperado
       const transactionsWithTags = (data || []).map((transaction: any) => ({
         ...transaction,
         tags: transaction.transaction_tags?.map((tt: any) => tt.tag) || []
       }));
-      
-      if (requestId === fetchRequestId.current) {
-        setTransactions(transactionsWithTags as Transaction[]);
-      }
+
       return transactionsWithTags as Transaction[];
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar transações",
-        description: error.message,
-        variant: "destructive",
-      });
-      return [] as Transaction[];
-    } finally {
-      if (requestId === fetchRequestId.current) {
-        setLoading(false);
-      }
-    }
-  }, [user, toast]);
+    },
+    enabled: !!user,
+  });
+
+  const loading = (transactionsLoading || authLoading) && !!user;
+
+  const invalidateQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+    ]);
+  }, [queryClient]);
+
+  const refetch = useCallback(async () => {
+    const [result] = await Promise.all([
+      refetchQuery(),
+      queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+    ]);
+    return result.data || [];
+  }, [refetchQuery, queryClient]);
 
   const generateRecurringTransactions = (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
-    const transactions = [];
+    const list = [];
     
     if (!transaction.is_recurring) {
       return [transaction];
@@ -118,7 +131,7 @@ export const useTransactions = () => {
       const d = String(currentDay).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
 
-      transactions.push({
+      list.push({
         ...transaction,
         date: dateStr,
         is_recurring: true, // Todas são recorrentes
@@ -160,7 +173,7 @@ export const useTransactions = () => {
       count++;
     }
 
-    return transactions;
+    return list;
   };
 
   const addTransaction = async (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'tags'> & { tag_ids?: string[] }) => {
@@ -207,8 +220,8 @@ export const useTransactions = () => {
         }
       }
       
-      // Buscar transações novamente para incluir tags
-      await fetchTransactions();
+      // Invalida cache de transações e cartões
+      await invalidateQueries();
       
       toast({
         title: "Transação adicionada",
@@ -263,8 +276,8 @@ export const useTransactions = () => {
         }
       }
       
-      // Buscar transações novamente para incluir tags atualizadas
-      await fetchTransactions();
+      // Invalida cache de transações e cartões
+      await invalidateQueries();
       
       toast({
         title: "Transação atualizada",
@@ -291,7 +304,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      await fetchTransactions();
+      await invalidateQueries();
       toast({
         title: "Transação excluída",
         description: "Transação removida com sucesso!",
@@ -320,7 +333,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
 
-      await fetchTransactions();
+      await invalidateQueries();
 
       toast({
         title: "Transações recorrentes excluídas",
@@ -451,7 +464,7 @@ export const useTransactions = () => {
         });
       }
 
-      await fetchTransactions();
+      await invalidateQueries();
 
       const updatedCount = data?.length || 0;
       toast({
@@ -468,10 +481,6 @@ export const useTransactions = () => {
     }
   };
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
-
   /**
    * Deleta múltiplas transações por IDs
    */
@@ -487,7 +496,7 @@ export const useTransactions = () => {
 
       if (error) throw error;
       
-      await fetchTransactions();
+      await invalidateQueries();
       toast({
         title: "Transações excluídas",
         description: `${ids.length} transações foram removidas.`,
@@ -510,6 +519,6 @@ export const useTransactions = () => {
     deleteMultipleTransactions,
     deleteAllRecurringTransactions,
     updateAllRecurringTransactions,
-    refetch: fetchTransactions,
+    refetch,
   };
 };

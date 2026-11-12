@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useTransactions } from './useTransactions';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTransactions, TRANSACTIONS_QUERY_KEY } from './useTransactions';
+import { CARDS_QUERY_KEY } from './useCards';
 import { useCategories } from './useCategories';
 import { useToast } from './use-toast';
 import { Transaction } from './useTransactions';
@@ -31,6 +33,7 @@ export interface ImportPreview {
 }
 
 export const useImport = () => {
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const { addTransaction } = useTransactions();
@@ -351,6 +354,11 @@ export const useImport = () => {
         }
       }
       
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CARDS_QUERY_KEY }),
+      ]);
+
       toast({
         title: 'Importação concluída',
         description: `${successCount} transações importadas com sucesso. ${errorCount > 0 ? `${errorCount} erros.` : ''}`,

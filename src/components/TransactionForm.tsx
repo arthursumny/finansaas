@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Transaction } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useTags, TagFormData } from "@/hooks/useTags";
+import { useCards } from "@/hooks/useCards";
 import { TagEditModal } from "./TagEditModal";
 
 interface TransactionFormData {
@@ -29,6 +30,8 @@ interface TransactionFormData {
   recurrence_count?: number;
   original_amount?: number;
   discount_amount?: number;
+  card_id?: string | null;
+  payment_method?: string | null;
   tag_ids?: string[];
 }
 
@@ -42,6 +45,9 @@ interface TransactionFormProps {
 const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
   const { getCategoryNamesByType, loading: categoriesLoading } = useCategories();
   const { tags, loading: tagsLoading, addTag } = useTags();
+  const { cards, loading: cardsLoading } = useCards();
+  const activeCards = cards.filter(c => c.is_active);
+
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
     return initialData?.tags?.map(tag => tag.id) || [];
   });
@@ -61,6 +67,8 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
         recurrence_count: initialData.recurrence_count || 1,
         original_amount: initialData.original_amount || initialData.amount,
         discount_amount: initialData.discount_amount || 0,
+        card_id: initialData.card_id || null,
+        payment_method: initialData.payment_method || null,
         tag_ids: initialData.tags?.map(tag => tag.id) || []
       };
     }
@@ -83,6 +91,8 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
       recurrence_count: 1,
       original_amount: 0,
       discount_amount: 0,
+      card_id: null,
+      payment_method: null,
       tag_ids: []
     };
   });
@@ -223,6 +233,16 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     }
   };
 
+  const handleCardSelect = (value: string) => {
+    const cardId = value === "none" ? null : value;
+    setFormData(prev => ({
+      ...prev,
+      card_id: cardId,
+      // Ao escolher um cartão, preenche automaticamente payment_method = 'credit'
+      payment_method: cardId ? 'credit' : prev.payment_method,
+    }));
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
       <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border-0 shadow-xl">
@@ -253,7 +273,7 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                 <Button
                   type="button"
                   variant={formData.type === "income" ? "income" : "outline"}
-                  onClick={() => setFormData(prev => ({ ...prev, type: "income", category: "" }))}
+                  onClick={() => setFormData(prev => ({ ...prev, type: "income", category: "", card_id: null }))}
                   className="w-full h-11 font-medium"
                 >
                   Receita
@@ -429,6 +449,53 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Cartão e Forma de Pagamento */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Cartão */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground">Cartão de Crédito</Label>
+                <Select
+                  value={formData.card_id || "none"}
+                  onValueChange={handleCardSelect}
+                  disabled={formData.type === "income" || cardsLoading}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder={formData.type === "income" ? "Desabilitado para receitas" : "Nenhum cartão"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum cartão</SelectItem>
+                    {activeCards.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} ({c.brand.toUpperCase()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Forma de Pagamento */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground">Forma de Pagamento</Label>
+                <Select
+                  value={formData.payment_method || "none"}
+                  onValueChange={(val) => setFormData(prev => ({ ...prev, payment_method: val === "none" ? null : val }))}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Selecione a forma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não informada</SelectItem>
+                    <SelectItem value="credit">Crédito</SelectItem>
+                    <SelectItem value="debit">Débito</SelectItem>
+                    <SelectItem value="pix">Pix</SelectItem>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                    <SelectItem value="transfer">Transferência</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Recorrência */}

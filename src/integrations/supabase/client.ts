@@ -61,6 +61,12 @@ async function request(path: string, init: RequestInit = {}) {
   return payload;
 }
 
+export async function apiFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
+  return request(path, init);
+}
+
+export { request };
+
 class LocalAuth {
   private listeners = new Set<AuthListener>();
 

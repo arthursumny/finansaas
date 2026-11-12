@@ -74,6 +74,48 @@ export type Database = {
         }
         Relationships: []
       }
+      cards: {
+        Row: {
+          brand: string
+          closing_day: number
+          color: string | null
+          created_at: string | null
+          due_day: number
+          id: string
+          is_active: boolean
+          limit_amount: number
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand?: string
+          closing_day?: number
+          color?: string | null
+          created_at?: string | null
+          due_day?: number
+          id?: string
+          is_active?: boolean
+          limit_amount?: number
+          name: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Update: {
+          brand?: string
+          closing_day?: number
+          color?: string | null
+          created_at?: string | null
+          due_day?: number
+          id?: string
+          is_active?: boolean
+          limit_amount?: number
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -101,6 +143,7 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          card_id: string | null
           category: string
           created_at: string | null
           date: string
@@ -110,6 +153,7 @@ export type Database = {
           is_recurring: boolean | null
           is_subscription: boolean | null
           original_amount: number | null
+          payment_method: string | null
           recurrence_count: number | null
           recurrence_end_date: string | null
           recurrence_start_date: string | null
@@ -123,6 +167,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_id?: string | null
           category: string
           created_at?: string | null
           date: string
@@ -132,6 +177,7 @@ export type Database = {
           is_recurring?: boolean | null
           is_subscription?: boolean | null
           original_amount?: number | null
+          payment_method?: string | null
           recurrence_count?: number | null
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null
@@ -145,6 +191,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_id?: string | null
           category?: string
           created_at?: string | null
           date?: string
@@ -154,6 +201,7 @@ export type Database = {
           is_recurring?: boolean | null
           is_subscription?: boolean | null
           original_amount?: number | null
+          payment_method?: string | null
           recurrence_count?: number | null
           recurrence_end_date?: string | null
           recurrence_start_date?: string | null

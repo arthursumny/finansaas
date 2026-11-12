@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { createPublicApiRouter } from "./public-api.js";
 import { accountConfirmationTemplate, emailConfirmationTemplate, isEmailEnabled, passwordResetTemplate, sendEmail } from "./email.js";
+import { registerCardRoutes } from "./cards.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.DATA_DIR || `${__dirname}/../data`;
@@ -120,6 +121,7 @@ function validatePassword(password) {
 const userScopedTables = new Set([
   "api_tokens",
   "budgets",
+  "cards",
   "categories",
   "goals",
   "profiles",
@@ -131,6 +133,7 @@ const userScopedTables = new Set([
 const clientTables = new Set([
   "api_tokens",
   "budgets",
+  "cards",
   "categories",
   "goals",
   "profiles",
@@ -238,6 +241,21 @@ function initSchema() {
       created_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS cards (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      brand TEXT NOT NULL DEFAULT 'outro',
+      limit_amount REAL NOT NULL DEFAULT 0,
+      closing_day INTEGER NOT NULL DEFAULT 1,
+      due_day INTEGER NOT NULL DEFAULT 10,
+      color TEXT DEFAULT '#6366f1',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT,
+      updated_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards(user_id);
+
     CREATE TABLE IF NOT EXISTS transactions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -258,6 +276,8 @@ function initSchema() {
       is_subscription INTEGER DEFAULT 0,
       subscription_day INTEGER,
       subscription_id TEXT,
+      card_id TEXT REFERENCES cards(id) ON DELETE SET NULL,
+      payment_method TEXT,
       created_at TEXT,
       updated_at TEXT
     );
@@ -382,10 +402,19 @@ function initSchema() {
   db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);");
 
+  const transactionColumns = db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name);
+  if (!transactionColumns.includes("card_id")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN card_id TEXT REFERENCES cards(id) ON DELETE SET NULL");
+  }
+  if (!transactionColumns.includes("payment_method")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN payment_method TEXT");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_card_id ON transactions(card_id);");
+
   cleanupExpiredSessions();
 
   for (const table of [
-    "api_tokens", "budgets", "categories", "goals", "profiles", "subscriptions",
+    "api_tokens", "budgets", "cards", "categories", "goals", "profiles", "subscriptions",
     "subscription_tags", "tags", "transactions", "transaction_tags", "users",
   ]) {
     tableColumns.set(table, new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name)));
@@ -708,6 +737,14 @@ function withRelations(table, rows, select) {
   if (table === "budgets" && select.includes("categories")) {
     const getCategory = db.prepare("SELECT id, name FROM categories WHERE id = ?");
     return rows.map((row) => ({ ...row, categories: getCategory.get(row.category_id) }));
+  }
+
+  if (table === "transactions" && (select.includes("cards") || select.includes("card"))) {
+    const getCard = db.prepare("SELECT id, name, brand, color FROM cards WHERE id = ?");
+    return rows.map((row) => ({
+      ...row,
+      card: row.card_id ? getCard.get(row.card_id) : null,
+    }));
   }
 
   return rows;
@@ -1175,6 +1212,8 @@ app.post("/api/query", requireUser, requireSession, (req, res) => {
     res.status(message.includes("UNIQUE") ? 409 : 500).json({ error: { message } });
   }
 });
+
+registerCardRoutes(app, { db, requireUser, requireSession });
 
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: { code: "not_found", message: "Rota não encontrada." } });

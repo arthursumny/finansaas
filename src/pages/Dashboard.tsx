@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,8 @@ import { GoalManager } from "@/components/GoalManager";
 import { TagManager } from "@/components/TagManager";
 import { SubscriptionManager } from "@/components/SubscriptionManager";
 import { ApiTokenManager } from "@/components/ApiTokenManager";
+import { CardManager } from "@/components/CardManager";
+import { useCards } from "@/hooks/useCards";
 import MonthlyEvolutionChart from "@/components/charts/MonthlyEvolutionChart";
 import CategoryPieChart from "@/components/charts/CategoryPieChart";
 import TransactionFiltersComponent from "@/components/filters/TransactionFilters";
@@ -76,6 +78,14 @@ const Dashboard = () => {
   const [showTagManager, setShowTagManager] = useState(false);
   const [showSubscriptionManager, setShowSubscriptionManager] = useState(false);
   const [showApiTokenManager, setShowApiTokenManager] = useState(false);
+  const [showCardManager, setShowCardManager] = useState(false);
+  const { summary: cardSummaries } = useCards();
+  const activeCardSummaries = useMemo(() => {
+    return cardSummaries.filter(c => c.is_active !== false);
+  }, [cardSummaries]);
+  const totalOpenInvoices = useMemo(() => {
+    return activeCardSummaries.reduce((sum, c) => sum + (c.current_invoice?.total || 0), 0);
+  }, [activeCardSummaries]);
   const [showCharts, setShowCharts] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -422,7 +432,7 @@ const Dashboard = () => {
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4">
-              {(showCategoryManager || showBudgetManager || showGoalManager || showTagManager || showSubscriptionManager || showApiTokenManager) && (
+              {(showCategoryManager || showBudgetManager || showGoalManager || showTagManager || showSubscriptionManager || showApiTokenManager || showCardManager) && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -433,6 +443,7 @@ const Dashboard = () => {
                     setShowTagManager(false);
                     setShowSubscriptionManager(false);
                     setShowApiTokenManager(false);
+                    setShowCardManager(false);
                   }}
                   className="h-9"
                 >
@@ -524,6 +535,20 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </>
+              ) : showCardManager ? (
+                <>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-2xl flex items-center justify-center">
+                    <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                      Cartões de Crédito
+                    </h1>
+                    <p className="text-xs sm:text-sm text-secondary hidden sm:block">
+                      Gerenciar Cartões e Faturas
+                    </p>
+                  </div>
+                </>
               ) : (
                 <img 
                   src={actualTheme === 'dark' ? '/logo_branca.png' : '/logo_preta.png'} 
@@ -535,7 +560,7 @@ const Dashboard = () => {
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Menu hambúrguer para dispositivos móveis */}
               <div className="sm:hidden">
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -577,6 +602,10 @@ const Dashboard = () => {
                         <CreditCard className="w-4 h-4 mr-2" />
                         Assinaturas Mensais
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowCardManager(true)}>
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Cartões de Crédito
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowApiTokenManager(true)}>
                         <KeyRound className="w-4 h-4 mr-2" />
                         Tokens da API
@@ -597,7 +626,7 @@ const Dashboard = () => {
 
               {/* Botões individuais para telas maiores */}
               <div className="hidden sm:flex items-center gap-2">
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant={showCharts ? "default" : "outline"}
                     size="sm"
@@ -609,7 +638,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">{showCharts ? "Ocultar" : "Gráficos"}</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -621,7 +650,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Importar</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -633,7 +662,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Exportar</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -645,7 +674,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Metas</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -657,7 +686,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Orçamentos</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -668,7 +697,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Categorias</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -680,7 +709,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Tags</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -692,7 +721,19 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">Assinaturas</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCardManager(true)}
+                    className="h-8 sm:h-9 w-8 sm:w-auto px-2 sm:px-3 border-secondary/30 text-secondary hover:bg-card hover:border-secondary"
+                    title="Cartões de crédito"
+                  >
+                    <CreditCard className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Cartões</span>
+                  </Button>
+                )}
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -704,7 +745,7 @@ const Dashboard = () => {
                     <span className="hidden sm:inline">API</span>
                   </Button>
                 )}
-                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && (
+                {!showCategoryManager && !showBudgetManager && !showGoalManager && !showTagManager && !showSubscriptionManager && !showApiTokenManager && !showCardManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -763,7 +804,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Cards de Resumo */}
-        <div className="grid gap-3 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid gap-3 sm:gap-6 grid-cols-1 sm:grid-cols-2 ${activeCardSummaries.length > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
           <Card className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-secondary">Receitas</CardTitle>
@@ -843,6 +884,30 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
+
+          {activeCardSummaries.length > 0 && (
+            <Card
+              onClick={() => setShowCardManager(true)}
+              className="border-0 shadow-sm hover:shadow-lg transition-all duration-200 bg-card cursor-pointer group"
+            >
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium text-secondary group-hover:text-primary transition-colors">
+                  Faturas do Mês
+                </CardTitle>
+                <div className="w-7 h-7 sm:w-10 sm:h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                  <CreditCard className="h-3 w-3 sm:h-5 sm:w-5" />
+                </div>
+              </CardHeader>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                <div className="text-base sm:text-2xl font-semibold text-foreground">
+                  {formatCurrency(totalOpenInvoices)}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {activeCardSummaries.length} {activeCardSummaries.length === 1 ? 'cartão ativo' : 'cartões ativos'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Resumo das Metas */}
@@ -1133,6 +1198,15 @@ const Dashboard = () => {
         <div className="fixed inset-0 bg-background z-50 overflow-auto">
           <div className="container mx-auto px-4 sm:px-6 py-6">
             <ApiTokenManager onBack={() => setShowApiTokenManager(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Gerenciador de Cartões de Crédito */}
+      {showCardManager && (
+        <div className="fixed inset-0 bg-background z-50 overflow-auto">
+          <div className="container mx-auto px-4 sm:px-6 py-6">
+            <CardManager onBack={() => setShowCardManager(false)} />
           </div>
         </div>
       )}
