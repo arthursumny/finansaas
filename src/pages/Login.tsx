@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,16 +11,28 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { passwordSchema, passwordStrength } from "@/lib/validation";
 
 const Login = () => {
+  const location = useLocation();
+  const initialTab =
+    new URLSearchParams(window.location.search || location.search).get("signup") === "1"
+      ? "signup"
+      : "signin";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(initialTab === "signup");
   const [signUpPasswordError, setSignUpPasswordError] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signIn, signUp } = useAuth();
   const { actualTheme } = useTheme();
+
+  useEffect(() => {
+    const signupParam = new URLSearchParams(window.location.search || location.search).get("signup");
+    if (signupParam === "1") {
+      setIsSignUp(true);
+    }
+  }, [location.search]);
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
@@ -111,6 +123,7 @@ const Login = () => {
           </CardHeader>
           <CardContent>
             <Tabs
+              defaultValue={initialTab}
               value={isSignUp ? "signup" : "signin"}
               onValueChange={(value) => {
                 setIsSignUp(value === "signup");
