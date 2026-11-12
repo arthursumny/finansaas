@@ -260,7 +260,6 @@ function initSchema() {
       updated_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_cards_user_id ON cards(user_id);
-    CREATE INDEX IF NOT EXISTS idx_cards_parent_card_id ON cards(parent_card_id);
 
     CREATE TABLE IF NOT EXISTS card_invoice_payments (
       id TEXT PRIMARY KEY,
@@ -270,8 +269,6 @@ function initSchema() {
       amount REAL NOT NULL,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_cip_card_month ON card_invoice_payments(card_id, reference_month);
-    CREATE INDEX IF NOT EXISTS idx_cip_user_id ON card_invoice_payments(user_id);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id TEXT PRIMARY KEY,
