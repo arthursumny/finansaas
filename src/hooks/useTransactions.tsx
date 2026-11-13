@@ -27,6 +27,7 @@ export interface Transaction {
   discount_amount?: number;
   card_id?: string | null;
   payment_method?: string | null;
+  invoice_month?: string | null;
   installment_group_id?: string | null;
   installment_number?: number | null;
   installment_total?: number | null;
@@ -49,6 +50,14 @@ export interface AddInstallmentsData {
 }
 
 export const TRANSACTIONS_QUERY_KEY = ['transactions'] as const;
+
+/**
+ * Competência em que a transação deve ser contabilizada.
+ * Para compras no cartão é a competência da fatura (invoice_month);
+ * para as demais, o próprio mês da data.
+ */
+export const transactionMonth = (transaction: Pick<Transaction, 'invoice_month' | 'date'>) =>
+  transaction.invoice_month || (transaction.date ? transaction.date.slice(0, 7) : '');
 
 export const useTransactions = () => {
   const queryClient = useQueryClient();

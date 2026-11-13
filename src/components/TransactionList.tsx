@@ -57,6 +57,7 @@ interface Transaction {
   discount_amount?: number;
   card_id?: string | null;
   payment_method?: string | null;
+  invoice_month?: string | null;
   installment_group_id?: string | null;
   installment_number?: number | null;
   installment_total?: number | null;
@@ -239,6 +240,13 @@ const TransactionList = ({
     const [y, m, d] = dateString.split("-");
     if (!y || !m || !d) return dateString;
     return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  };
+
+  // Só exibe o selo da fatura quando ela difere do mês da data da compra
+  const getInvoiceMonthLabel = (transaction: Transaction) => {
+    if (!transaction.card_id || !transaction.invoice_month) return null;
+    if (transaction.invoice_month === (transaction.date || "").slice(0, 7)) return null;
+    return `Fatura ${transaction.invoice_month.slice(5, 7)}/${transaction.invoice_month.slice(0, 4)}`;
   };
 
   const handleMarkAsPaid = (transaction: Transaction) => {
@@ -499,6 +507,11 @@ const TransactionList = ({
                         {cardMap.get(transaction.card_id)?.name}
                       </Badge>
                     )}
+                    {getInvoiceMonthLabel(transaction) && (
+                      <Badge variant="outline" className="text-xs font-normal text-secondary">
+                        {getInvoiceMonthLabel(transaction)}
+                      </Badge>
+                    )}
                     {transaction.is_recurring && (
                       <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
                         Rec.
@@ -663,6 +676,11 @@ const TransactionList = ({
                       >
                         <CreditCard className="w-3 h-3" />
                         {cardMap.get(transaction.card_id)?.name}
+                      </Badge>
+                    )}
+                    {getInvoiceMonthLabel(transaction) && (
+                      <Badge variant="outline" className="text-xs font-normal text-secondary">
+                        {getInvoiceMonthLabel(transaction)}
                       </Badge>
                     )}
                     {transaction.is_recurring && (

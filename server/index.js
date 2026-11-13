@@ -807,8 +807,83 @@ function selectRows(table, query, user) {
   return withRelations(table, rows, query.select || "");
 }
 
+/**
+ * Competência da fatura de cartão de crédito.
+ * Se o dia da compra for maior que o dia de fechamento, a compra entra na
+ * fatura do mês seguinte; caso contrário, na fatura do próprio mês.
+ *
+ * @param {string|null|undefined} dateStr data no formato 'YYYY-MM-DD'
+ * @param {number|string|null|undefined} closingDay dia de fechamento do cartão
+ * @returns {string|null} competência no formato 'YYYY-MM'
+ */
+export function computeInvoiceMonth(dateStr, closingDay) {
+  if (!dateStr) return null;
+
+  const date = String(dateStr).slice(0, 10);
+  const [yearStr, monthStr] = date.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(date.slice(8, 10));
+
+  if (!year || !month || !day) return null;
+
+  const fallback = `${yearStr}-${monthStr}`;
+  const closing = Number(closingDay);
+  if (!Number.isFinite(closing) || closing < 1) return fallback;
+
+  let invoiceYear = year;
+  let invoiceMonth = month;
+
+  if (day > closing) {
+    invoiceMonth += 1;
+    if (invoiceMonth > 12) {
+      invoiceMonth = 1;
+      invoiceYear += 1;
+    }
+  }
+
+  return `${invoiceYear}-${String(invoiceMonth).padStart(2, "0")}`;
+}
+
+/**
+ * Adiciona `invoice_month` (competência da fatura) em todas as transações.
+ * O closing_day de cada cartão é carregado no máximo uma vez por chamada.
+ */
+function withInvoiceMonth(rows) {
+  if (!rows.length) return rows;
+
+  const getCard = db.prepare("SELECT closing_day FROM cards WHERE id = ?");
+  const closingDays = new Map();
+
+  return rows.map((row) => {
+    const dateMonth = row.date ? String(row.date).slice(0, 7) : null;
+
+    if (!row.card_id) {
+      return { ...row, invoice_month: dateMonth };
+    }
+
+    let closingDay = closingDays.get(row.card_id);
+    if (closingDay === undefined) {
+      const card = getCard.get(row.card_id);
+      closingDay = card ? card.closing_day : null;
+      closingDays.set(row.card_id, closingDay);
+    }
+
+    return {
+      ...row,
+      invoice_month: computeInvoiceMonth(row.date, closingDay) ?? dateMonth,
+    };
+  });
+}
+
 function withRelations(table, rows, select) {
   if (!rows.length) return rows;
+
+  // Aplicado antes dos early-returns para que invoice_month apareça em todos
+  // os formatos de retorno (inclusive quando transaction_tags é selecionado).
+  if (table === "transactions") {
+    rows = withInvoiceMonth(rows);
+  }
 
   if (table === "transactions" && select.includes("transaction_tags")) {
     const getTags = db.prepare(`

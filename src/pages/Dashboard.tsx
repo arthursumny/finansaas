@@ -34,10 +34,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { format, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
+import { format, startOfMonth, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
-import { useTransactions, Transaction } from "@/hooks/useTransactions";
+import { useTransactions, Transaction, transactionMonth } from "@/hooks/useTransactions";
 import { useSubscriptions, SubscriptionFormData } from "@/hooks/useSubscriptions";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
@@ -323,28 +323,17 @@ const Dashboard = () => {
     setEditingTransaction(transaction);
   };
 
-  // Filtrar transações do mês atual
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  
-  const parseLocalDate = (dateString: string) => {
-    // Converte 'yyyy-MM-dd' para Date local sem hora
-    const [y, m, d] = dateString.split("-");
-    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-  };
-  
+  // Competência do mês exibido: para cartão, é o mês da fatura (invoice_month)
+  const displayedMonth = format(currentDate, "yyyy-MM");
+
   // Aplicar filtros avançados primeiro, depois filtro por mês (se não há filtro de data personalizado)
   const currentMonthTransactions = hasActiveFilters && (filters.dateStart || filters.dateEnd) 
     ? filteredTransactions // Se há filtro de data personalizado, usar apenas filtros avançados
-    : filteredTransactions.filter(transaction => {
-        const transactionDate = parseLocalDate(transaction.date);
-        return transactionDate >= monthStart && transactionDate <= monthEnd;
-      });
+    : filteredTransactions.filter(transaction => transactionMonth(transaction) === displayedMonth);
 
-  const currentMonthSummaryTransactions = transactions.filter(transaction => {
-    const transactionDate = parseLocalDate(transaction.date);
-    return transactionDate >= monthStart && transactionDate <= monthEnd;
-  });
+  const currentMonthSummaryTransactions = transactions.filter(
+    transaction => transactionMonth(transaction) === displayedMonth
+  );
 
   const selectedTagIds = filters.tagIds || [];
   const selectedTags = transactions
@@ -378,12 +367,9 @@ const Dashboard = () => {
   const monthlyNet = monthlyIncome - monthlyExpenses;
 
   const calculatePreviousMonthBalance = () => {
-    const currentMonthStart = startOfMonth(currentDate);
-
     return transactions
       .filter(transaction => {
-        const transactionDate = parseLocalDate(transaction.date);
-        return transaction.status === "paid" && transactionDate < currentMonthStart;
+        return transaction.status === "paid" && transactionMonth(transaction) < displayedMonth;
       })
       .reduce((sum, transaction) => (
         transaction.type === "income"
@@ -401,13 +387,9 @@ const Dashboard = () => {
   // Calcular saldo atual considerando apenas lançamentos confirmados até o mês exibido
   const calculateCurrentBalance = () => {
     const allPaidTransactions = transactions.filter(t => t.status === "paid");
-    const balanceEndDate = endOfMonth(currentDate);
 
     return allPaidTransactions
-      .filter(transaction => {
-        const transactionDate = parseLocalDate(transaction.date);
-        return transactionDate <= balanceEndDate;
-      })
+      .filter(transaction => transactionMonth(transaction) <= displayedMonth)
       .reduce((sum, transaction) => (
         transaction.type === "income"
           ? sum + transaction.amount

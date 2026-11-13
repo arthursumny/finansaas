@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Transaction } from '@/hooks/useTransactions';
+import { Transaction, transactionMonth } from '@/hooks/useTransactions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp } from 'lucide-react';
 
@@ -33,14 +33,13 @@ const MonthlyEvolutionChart = ({ transactions }: MonthlyEvolutionChartProps) => 
     // Gerar dados para os últimos 6 meses
     for (let i = 5; i >= 0; i--) {
       const monthDate = subMonths(currentDate, i);
-      const monthStart = startOfMonth(monthDate);
-      const monthEnd = endOfMonth(monthDate);
+      const monthKey = format(monthDate, 'yyyy-MM');
       
-      // Filtrar lançamentos do mês, independente do status
-      const monthTransactions = transactions.filter(transaction => {
-        const transactionDate = new Date(transaction.date + 'T00:00:00');
-        return transactionDate >= monthStart && transactionDate <= monthEnd;
-      });
+      // Filtrar lançamentos pela competência do mês (fatura do cartão quando houver),
+      // independente do status
+      const monthTransactions = transactions.filter(
+        transaction => transactionMonth(transaction) === monthKey
+      );
       
       // Calcular totais
       const receitas = monthTransactions
