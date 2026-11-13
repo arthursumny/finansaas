@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import { Transaction, useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useTags, TagFormData } from "@/hooks/useTags";
 import { useCards } from "@/hooks/useCards";
+import { useToast } from "@/hooks/use-toast";
 import { TagEditModal } from "./TagEditModal";
 
 interface TransactionFormData {
@@ -45,7 +46,8 @@ interface TransactionFormProps {
 
 const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: TransactionFormProps) => {
   const { addInstallments } = useTransactions();
-  const { getCategoryNamesByType, loading: categoriesLoading } = useCategories();
+  const { categories, getCategoryNamesByType, loading: categoriesLoading } = useCategories();
+  const { toast } = useToast();
   const { tags, loading: tagsLoading, addTag } = useTags();
   const { cards, loading: cardsLoading } = useCards();
   const activeCards = cards.filter(c => c.is_active);
@@ -185,12 +187,57 @@ const TransactionForm = ({ onSubmit, onClose, initialData, isEditing = false }: 
     return parseFloat(cleanValue) || 0;
   };
 
+  /**
+   * Preenche a categoria automaticamente com a primeira categoria do tipo
+   * atual quando o formulário é novo (criação) e a categoria está vazia ou
+   * não pertence mais ao tipo selecionado (ex.: troca receita <-> despesa).
+   */
+  useEffect(() => {
+    if (isEditing || categoriesLoading) return;
+
+    const categoriesForType = categories.filter(cat => cat.type === formData.type);
+    if (categoriesForType.length === 0) return;
+
+    setFormData(prev => {
+      const isCurrentValid = categoriesForType.some(cat => cat.name === prev.category);
+      if (isCurrentValid) return prev;
+      return { ...prev, category: categoriesForType[0].name };
+    });
+  }, [categories, categoriesLoading, formData.type, isEditing]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Converte o valor string para número usando a nova lógica
     const amount = parseAmountString(amountString);
-    
+
+    if (!formData.description.trim()) {
+      toast({
+        title: "Informe uma descrição",
+        description: "A descrição da transação é obrigatória.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (amount <= 0) {
+      toast({
+        title: "Informe um valor maior que zero",
+        description: "O valor da transação deve ser maior que zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.category) {
+      toast({
+        title: "Selecione uma categoria",
+        description: "Escolha uma categoria para a transação.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (formData.description && amount > 0 && formData.category) {
       if (!isEditing && formData.type === "expense" && formData.card_id && installments > 1) {
         setIsSubmitting(true);
