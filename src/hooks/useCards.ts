@@ -96,7 +96,7 @@ export interface CardInvoiceDetails extends CardInvoiceSummary {
 
 export const CARDS_QUERY_KEY = ['cards'] as const;
 
-export const useCards = () => {
+export const useCards = (referenceMonth?: string) => {
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -129,10 +129,11 @@ export const useCards = () => {
     isLoading: summaryLoading,
     refetch: refetchSummary,
   } = useQuery<CardSummary[]>({
-    queryKey: [...CARDS_QUERY_KEY, 'summary', user?.id],
+    queryKey: [...CARDS_QUERY_KEY, 'summary', user?.id, referenceMonth ?? 'current'],
     queryFn: async () => {
       if (!user) return [];
-      const res = await apiFetch<CardSummary[]>('/cards/summary');
+      const query = referenceMonth ? `?reference_month=${encodeURIComponent(referenceMonth)}` : '';
+      const res = await apiFetch<CardSummary[]>(`/cards/summary${query}`);
       const list = Array.isArray(res) ? res : ((res as any)?.cards || []);
       return list;
     },

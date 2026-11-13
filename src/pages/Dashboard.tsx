@@ -80,7 +80,7 @@ const Dashboard = () => {
   const [showSubscriptionManager, setShowSubscriptionManager] = useState(false);
   const [showApiTokenManager, setShowApiTokenManager] = useState(false);
   const [showCardManager, setShowCardManager] = useState(false);
-  const { summary: cardSummaries } = useCards();
+  const { summary: cardSummaries } = useCards(format(currentDate, 'yyyy-MM'));
   const activeCardSummaries = useMemo(() => {
     return cardSummaries.filter(c => c.is_active !== false);
   }, [cardSummaries]);

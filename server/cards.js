@@ -287,20 +287,28 @@ export function getCardInvoiceDetails(db, card, referenceMonth, options = {}) {
 
 /**
  * Retorna o resumo de todos os cartões ativos de um usuário
+ *
+ * options.referenceMonth (YYYY-MM): quando informado e válido, usa esse mês
+ * como fatura de referência de cada cartão em vez do ciclo aberto atual.
  */
-export function getCardsSummary(db, userId, referenceDate = new Date()) {
+export function getCardsSummary(db, userId, referenceDate = new Date(), options = {}) {
   const cards = db.prepare(`
     SELECT * FROM cards
     WHERE user_id = ? AND is_active = 1
     ORDER BY created_at ASC, name ASC
   `).all(userId);
 
+  const optionReferenceMonth = options && typeof options.referenceMonth === "string"
+    && /^\d{4}-(0[1-9]|1[0-2])$/.test(options.referenceMonth)
+    ? options.referenceMonth
+    : null;
+
   // Mapear titulares primeiro para calcular limites e usos de família
   const parentSummaries = new Map();
 
   for (const card of cards) {
     if (!card.parent_card_id) {
-      const openMonth = getCurrentReferenceMonth(card, referenceDate);
+      const openMonth = optionReferenceMonth || getCurrentReferenceMonth(card, referenceDate);
       const invoice = getCardInvoiceDetails(db, card, openMonth, { includeAdditional: true });
       const nextMonth = getNextMonth(openMonth);
       const nextInvoice = getCardInvoiceDetails(db, card, nextMonth, { includeAdditional: true });
@@ -335,7 +343,7 @@ export function getCardsSummary(db, userId, referenceDate = new Date()) {
   for (const card of cards) {
     if (card.parent_card_id) {
       const parent = parentSummaries.get(card.parent_card_id) || db.prepare("SELECT * FROM cards WHERE id = ?").get(card.parent_card_id);
-      const openMonth = getCurrentReferenceMonth(card, referenceDate);
+      const openMonth = optionReferenceMonth || getCurrentReferenceMonth(card, referenceDate);
       const invoice = getCardInvoiceDetails(db, card, openMonth, { includeAdditional: false });
       const nextMonth = getNextMonth(openMonth);
       const nextInvoice = getCardInvoiceDetails(db, card, nextMonth, { includeAdditional: false });
@@ -470,10 +478,20 @@ export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new
  * Registra as rotas de cartões no Express app
  */
 export function registerCardRoutes(app, { db, requireUser, requireSession }) {
-  // GET /api/cards/summary
+  // GET /api/cards/summary?reference_month=YYYY-MM
   app.get("/api/cards/summary", requireUser, requireSession, (req, res) => {
     try {
-      const summary = getCardsSummary(db, req.user.id);
+      const referenceMonth = req.query.reference_month;
+      if (referenceMonth !== undefined && referenceMonth !== null && referenceMonth !== "") {
+        if (typeof referenceMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(referenceMonth)) {
+          return res.status(400).json({ error: { message: "Mês inválido. Formato esperado: YYYY-MM." } });
+        }
+      }
+
+      const options = {};
+      if (referenceMonth) options.referenceMonth = referenceMonth;
+
+      const summary = getCardsSummary(db, req.user.id, new Date(), options);
       res.json(summary);
     } catch (error) {
       res.status(500).json({ error: { message: error.message || "Erro ao obter resumo dos cartões." } });
