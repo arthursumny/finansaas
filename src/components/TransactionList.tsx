@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   Select,
@@ -119,12 +119,14 @@ const TransactionList = ({
   }>({ isOpen: false, transaction: null });
 
   const [installmentToDelete, setInstallmentToDelete] = useState<Transaction | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
+  const [recurringToDelete, setRecurringToDelete] = useState<Transaction | null>(null);
 
   const handleDeleteClick = (transaction: Transaction) => {
     if (transaction.installment_group_id && (transaction.installment_total || 0) > 1) {
       setInstallmentToDelete(transaction);
     } else {
-      onDelete(transaction.id);
+      setPendingDelete(transaction);
     }
   };
 
@@ -623,7 +625,7 @@ const TransactionList = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onDeleteAllRecurring(transaction)}
+                    onClick={() => setRecurringToDelete(transaction)}
                     className="h-7 text-xs px-2 text-destructive hover:text-destructive hover:bg-destructive/10 font-medium flex-1"
                     title="Excluir todas as recorrências"
                   >
@@ -791,7 +793,7 @@ const TransactionList = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onDeleteAllRecurring(transaction)}
+                      onClick={() => setRecurringToDelete(transaction)}
                       className="h-9 text-xs px-3 text-destructive hover:text-destructive hover:bg-destructive/10 font-medium"
                       title="Excluir todas as recorrências"
                     >
@@ -858,6 +860,62 @@ const TransactionList = ({
               }}
             >
               Esta e as seguintes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação para exclusão de lançamento individual */}
+      <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vai excluir &quot;{pendingDelete?.description}&quot; ({pendingDelete ? formatCurrency(pendingDelete.amount) : ""}). Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDelete(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => {
+                if (pendingDelete) {
+                  onDelete(pendingDelete.id);
+                  setPendingDelete(null);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação para exclusão de recorrências futuras */}
+      <AlertDialog open={!!recurringToDelete} onOpenChange={(open) => !open && setRecurringToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir as próximas recorrências?</AlertDialogTitle>
+            <AlertDialogDescription>
+              As ocorrências futuras de &quot;{recurringToDelete?.description}&quot; serão removidas; o histórico pago é mantido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRecurringToDelete(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => {
+                if (recurringToDelete) {
+                  onDeleteAllRecurring(recurringToDelete);
+                  setRecurringToDelete(null);
+                }
+              }}
+            >
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

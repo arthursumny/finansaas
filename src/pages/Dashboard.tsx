@@ -256,6 +256,9 @@ const Dashboard = () => {
          if (!haveSameTagIds(editingTransaction.tags, transactionData.tag_ids)) {
            changedFields.push('as tags');
          }
+         if ((editingTransaction.card_id || null) !== (transactionData.card_id || null)) {
+           changedFields.push('o cartão');
+         }
         
         console.log('Campos alterados:', changedFields);
         
@@ -288,7 +291,7 @@ const Dashboard = () => {
       const old = editingTransaction;
       const newData = recurringUpdateModal.transactionData;
       const updates: Partial<Transaction> & { tag_ids?: string[] } = {};
-      const groupFields: Array<keyof Pick<Transaction, 'type' | 'description' | 'amount' | 'category' | 'status'>> = ['type', 'description', 'amount', 'category', 'status'];
+      const groupFields: Array<keyof Pick<Transaction, 'type' | 'description' | 'amount' | 'category' | 'status' | 'card_id' | 'payment_method'>> = ['type', 'description', 'amount', 'category', 'status', 'card_id', 'payment_method'];
       for (const field of groupFields) {
         if (newData[field] !== old[field]) {
           (updates as Record<string, any>)[field] = newData[field];
