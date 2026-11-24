@@ -311,7 +311,7 @@ test("server/cards.js — Rotas HTTP /api/cards/summary, /invoice, /invoices e e
   });
   assert.equal(historyRes.response.status, 200);
   assert.ok(Array.isArray(historyRes.body));
-  assert.equal(historyRes.body.length, 12);
+  assert.equal(historyRes.body.length, 25);
   const currentHistory = historyRes.body.find((inv) => inv.reference_month === currentOpenMonth);
   assert.ok(currentHistory);
   assert.equal(currentHistory.total, 250);
@@ -341,4 +341,157 @@ test("server/cards.js — Rotas HTTP /api/cards/summary, /invoice, /invoices e e
   const supermarketTx = remainingTxs.find((t) => t.description === "Supermercado");
   assert.ok(supermarketTx, "A transação de supermercado deve continuar existindo");
   assert.equal(supermarketTx.card_id, null, "card_id da transação deve ter ficado NULL após exclusão do cartão");
+});
+
+test("server/cards.js — getCardInvoicesHistory faturas futuras e passadas", async (context) => {
+  const dataDir = mkdtempSync(join(tmpdir(), "finansaas-cards-future-test-"));
+  process.env.DATA_DIR = dataDir;
+  process.env.DATABASE_PATH = join(dataDir, "cards-future-test.sqlite");
+  process.env.APP_PUBLIC_URL = "http://localhost:8080";
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_FROM;
+
+  const { app, db, resetRateLimits } = await import(
+    `./index.js?cards-future-test=${Date.now()}`
+  );
+  const { getCardInvoicesHistory, getCurrentReferenceMonth } = await import("./cards.js");
+  resetRateLimits();
+
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}/api`;
+
+  context.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  async function request(path, options = {}) {
+    const response = await fetch(`${baseUrl}${path}`, options);
+    const text = await response.text();
+    return { response, body: text ? JSON.parse(text) : null };
+  }
+
+  // Criar usuário
+  const userRes = await request("/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "future-test@finansaas.local", password: "Password123!" }),
+  });
+  const token = userRes.body.session?.access_token || userRes.body.access_token;
+  const authHeader = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  // Criar cartão (fechamento dia 10, vencimento dia 15)
+  const cardRes = await request("/query", {
+    method: "POST",
+    headers: authHeader,
+    body: JSON.stringify({
+      table: "cards",
+      action: "insert",
+      values: [{ name: "Cartão Futuro", brand: "visa", limit_amount: 5000, closing_day: 10, due_day: 15 }],
+    }),
+  });
+  const card = cardRes.body.data[0];
+
+  const now = new Date();
+  const currentMonth = getCurrentReferenceMonth(card, now);
+
+  // Criar uma parcela no mês seguinte (futura)
+  const [y, m] = currentMonth.split("-").map(Number);
+  const nextMonthDate = m === 12 ? `${y + 1}-01-05` : `${y}-${String(m + 1).padStart(2, "0")}-05`;
+  const nextMonthYM = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+
+  await request("/query", {
+    method: "POST",
+    headers: authHeader,
+    body: JSON.stringify({
+      table: "transactions",
+      action: "insert",
+      values: [
+        {
+          description: "Compra Parcela Futura",
+          amount: 300,
+          date: nextMonthDate,
+          type: "expense",
+          category: "Eletrônicos",
+          status: "pending",
+          card_id: card.id,
+        },
+      ],
+    }),
+  });
+
+  // 1) Testar getCardInvoicesHistory com options customizadas de pastMonths e futureMonths
+  const customHistory = getCardInvoicesHistory(db, card, 12, now, { pastMonths: 3, futureMonths: 2 });
+  assert.equal(customHistory.length, 6); // 3 passados + 1 atual + 2 futuros = 6
+  assert.equal(customHistory.some((inv) => inv.reference_month === currentMonth), true);
+
+  // 2) A fatura futura deve conter a compra com total > 0
+  const futureInv = customHistory.find((inv) => inv.reference_month === nextMonthYM);
+  assert.ok(futureInv, `Fatura futura ${nextMonthYM} deve estar no histórico`);
+  assert.equal(futureInv.total, 300);
+  assert.equal(futureInv.transactions_count, 1);
+
+  // 3) Chamada via HTTP GET /api/cards/:id/invoices com past_months e future_months
+  const httpRes = await request(`/cards/${card.id}/invoices?past_months=2&future_months=3`, {
+    method: "GET",
+    headers: authHeader,
+  });
+  assert.equal(httpRes.response.status, 200);
+  assert.equal(httpRes.body.length, 6); // 2 + 1 + 3 = 6
+  const httpFuture = httpRes.body.find((inv) => inv.reference_month === nextMonthYM);
+  assert.ok(httpFuture);
+  assert.equal(httpFuture.total, 300);
+
+  // 4) Compra após o fechamento do mês corrente (dia 12 > fechamento dia 10) cai na fatura futura
+  const afterClosingDate = `${currentMonth}-12`;
+  await request("/query", {
+    method: "POST",
+    headers: authHeader,
+    body: JSON.stringify({
+      table: "transactions",
+      action: "insert",
+      values: [
+        {
+          description: "Compra após fechamento",
+          amount: 150,
+          date: afterClosingDate,
+          type: "expense",
+          category: "Serviços",
+          status: "pending",
+          card_id: card.id,
+        },
+      ],
+    }),
+  });
+
+  const updatedHistory = getCardInvoicesHistory(db, card, 12, now, { pastMonths: 1, futureMonths: 2 });
+  const updatedFuture = updatedHistory.find((inv) => inv.reference_month === nextMonthYM);
+  assert.ok(updatedFuture);
+  assert.equal(updatedFuture.total, 450);
+  assert.equal(updatedFuture.transactions_count, 2);
+
+  // 5) Detalhes da fatura futura (GET /api/cards/:id/invoice?month=...)
+  const invDetailsRes = await request(`/cards/${card.id}/invoice?month=${nextMonthYM}`, {
+    method: "GET",
+    headers: authHeader,
+  });
+  assert.equal(invDetailsRes.response.status, 200);
+  assert.equal(invDetailsRes.body.transactions.length, 2);
+  assert.equal(invDetailsRes.body.total, 450);
+
+  // 6) Fatura futura vazia não quebra e retorna total 0 e transactions vazia
+  const emptyFutureYM = m === 12 ? `${y + 1}-02` : (m === 11 ? `${y + 1}-01` : `${y}-${String(m + 2).padStart(2, "0")}`);
+  const emptyInvRes = await request(`/cards/${card.id}/invoice?month=${emptyFutureYM}`, {
+    method: "GET",
+    headers: authHeader,
+  });
+  assert.equal(emptyInvRes.response.status, 200);
+  assert.equal(emptyInvRes.body.total, 0);
+  assert.equal(emptyInvRes.body.transactions.length, 0);
 });

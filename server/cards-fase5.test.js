@@ -342,7 +342,9 @@ test("server/cards.js — FASE 5: Testes de 1 a 5 e 7 a 10 (Rotas HTTP e Regras 
   // com 0, não soma.
   // =========================================================================
   const today = new Date();
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = today.getDate() > 18
+    ? (today.getMonth() === 11 ? `${today.getFullYear() + 1}-01` : `${today.getFullYear()}-${String(today.getMonth() + 2).padStart(2, "0")}`)
+    : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 
   // Compra no titular: R$ 100
   await request("/query", {

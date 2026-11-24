@@ -397,10 +397,27 @@ export function getCardsSummary(db, userId, referenceDate = new Date(), options 
   return result;
 }
 
+function addMonthsToYM(yearMonth, offset) {
+  const [y, m] = yearMonth.split("-").map(Number);
+  const totalMonths = y * 12 + (m - 1) + offset;
+  const newY = Math.floor(totalMonths / 12);
+  const newM = (totalMonths % 12) + 1;
+  return `${newY}-${String(newM).padStart(2, "0")}`;
+}
+
 /**
- * Retorna os últimos 12 ciclos de faturas de um cartão
+ * Retorna o histórico de faturas de um cartão (meses passados + mês atual + meses futuros em ordem cronológica ascendente)
  */
 export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new Date(), options = {}) {
+  if (typeof count === "object" && count !== null) {
+    options = count;
+    count = 12;
+    referenceDate = new Date();
+  } else if (typeof referenceDate === "object" && !(referenceDate instanceof Date) && referenceDate !== null) {
+    options = referenceDate;
+    referenceDate = new Date();
+  }
+
   const includeAdditional = options.includeAdditional !== false;
   let cardIds = [card.id];
 
@@ -415,9 +432,12 @@ export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new
   const currentOpenMonth = getCurrentReferenceMonth(card, referenceDate);
   const invoices = [];
 
-  let currentMonth = currentOpenMonth;
-  for (let i = 0; i < count; i++) {
-    const cycle = computeInvoiceCycle(card.closing_day, card.due_day, currentMonth);
+  const pastMonths = options.pastMonths !== undefined ? Number(options.pastMonths) : 12;
+  const futureMonths = options.futureMonths !== undefined ? Number(options.futureMonths) : 12;
+
+  for (let offset = -pastMonths; offset <= futureMonths; offset++) {
+    const month = addMonthsToYM(currentOpenMonth, offset);
+    const cycle = computeInvoiceCycle(card.closing_day, card.due_day, month);
 
     const row = db.prepare(`
       SELECT
@@ -439,7 +459,7 @@ export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new
       WHERE card_id IN (${placeholders})
         AND reference_month = ?
         AND user_id = ?
-    `).get(...cardIds, currentMonth, card.user_id);
+    `).get(...cardIds, month, card.user_id);
 
     const total = Math.round((row?.total || 0) * 100) / 100;
     const txPaid = Math.round((row?.paid_total || 0) * 100) / 100;
@@ -455,7 +475,7 @@ export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new
     }
 
     invoices.push({
-      reference_month: currentMonth,
+      reference_month: month,
       cycle_start: cycle.cycleStart,
       cycle_end: cycle.cycleEnd,
       due_date: cycle.dueDate,
@@ -467,8 +487,6 @@ export function getCardInvoicesHistory(db, card, count = 12, referenceDate = new
       status,
       transactions_count: row?.transactions_count || 0,
     });
-
-    currentMonth = getPrevMonth(currentMonth);
   }
 
   return invoices;
@@ -551,7 +569,13 @@ export function registerCardRoutes(app, { db, requireUser, requireSession }) {
       }
 
       const includeAdditional = req.query.include_additional !== "0" && req.query.include_additional !== "false";
-      const invoices = getCardInvoicesHistory(db, card, 12, new Date(), { includeAdditional });
+      const pastMonths = req.query.past_months !== undefined ? parseInt(req.query.past_months, 10) : 12;
+      const futureMonths = req.query.future_months !== undefined ? parseInt(req.query.future_months, 10) : 12;
+      const invoices = getCardInvoicesHistory(db, card, 12, new Date(), {
+        includeAdditional,
+        pastMonths,
+        futureMonths,
+      });
       res.json(invoices);
     } catch (error) {
       res.status(500).json({ error: { message: error.message || "Erro ao obter histórico de faturas." } });

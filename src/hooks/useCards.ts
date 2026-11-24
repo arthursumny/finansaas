@@ -277,10 +277,17 @@ export const useCards = (referenceMonth?: string) => {
     }
   }, []);
 
-  const fetchInvoicesHistory = useCallback(async (cardId: string, includeAdditional?: boolean): Promise<CardInvoiceSummary[]> => {
+  const fetchInvoicesHistory = useCallback(async (
+    cardId: string,
+    includeAdditional?: boolean,
+    pastMonths: number = 12,
+    futureMonths: number = 12
+  ): Promise<CardInvoiceSummary[]> => {
     try {
       const params = new URLSearchParams();
       if (includeAdditional !== undefined) params.set('include_additional', includeAdditional ? '1' : '0');
+      params.set('past_months', String(pastMonths));
+      params.set('future_months', String(futureMonths));
       const query = params.toString() ? `?${params.toString()}` : '';
       const res = await apiFetch<CardInvoiceSummary[]>(`/cards/${cardId}/invoices${query}`);
       return Array.isArray(res) ? res : [];

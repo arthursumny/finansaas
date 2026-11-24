@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -20,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -44,10 +47,53 @@ import {
   ArrowRight,
   DollarSign,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { Card, CardInvoiceDetails, CardInvoicePayment, useCards } from '@/hooks/useCards';
+import { Card, CardInvoiceDetails, CardInvoicePayment, InvoiceTransaction, useCards } from '@/hooks/useCards';
 import { useToast } from '@/hooks/use-toast';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useCategories } from '@/hooks/useCategories';
+
+function getCurrentReferenceMonth(card: Card, referenceDate: Date = new Date()): string {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth() + 1;
+  const day = referenceDate.getDate();
+
+  const closingDay = Number(card.closing_day || 1);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const actualClosingDay = Math.min(closingDay, daysInMonth);
+
+  if (day > actualClosingDay) {
+    if (month === 12) {
+      return `${year + 1}-01`;
+    }
+    return `${year}-${String(month + 1).padStart(2, '0')}`;
+  }
+
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function findClosestReferenceMonth(history: { reference_month: string }[], targetYm: string): string {
+  if (history.length === 0) return targetYm;
+  const [ty, tm] = targetYm.split('-').map(Number);
+  const targetVal = ty * 12 + tm;
+
+  let closest = history[0].reference_month;
+  let minDiff = Infinity;
+
+  for (const inv of history) {
+    const [y, m] = inv.reference_month.split('-').map(Number);
+    const val = y * 12 + m;
+    const diff = Math.abs(val - targetVal);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = inv.reference_month;
+    }
+  }
+
+  return closest;
+}
 
 interface CardInvoiceModalProps {
   isOpen: boolean;
@@ -70,12 +116,23 @@ export const CardInvoiceModal = ({
     deleteInvoicePayment,
     unpayInvoice,
   } = useCards();
+  const { updateTransaction } = useTransactions();
+  const { categories } = useCategories();
   const { toast } = useToast();
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [availableMonths, setAvailableMonths] = useState<{ value: string; label: string }[]>([]);
   const [invoice, setInvoice] = useState<CardInvoiceDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [includeAdditionals, setIncludeAdditionals] = useState(true);
+
+  const [editingTx, setEditingTx] = useState<InvoiceTransaction | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editStatus, setEditStatus] = useState<'paid' | 'pending'>('pending');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [updatingTxId, setUpdatingTxId] = useState<string | null>(null);
 
   const [isPayConfirmOpen, setIsPayConfirmOpen] = useState(false);
   const [isPayMinConfirmOpen, setIsPayMinConfirmOpen] = useState(false);
@@ -103,6 +160,8 @@ export const CardInvoiceModal = ({
       isLoadingRef.current = false;
       inFlightInvoiceKeyRef.current = null;
       historyInFlightRef.current = null;
+      setEditingTx(null);
+      setUpdatingTxId(null);
     }
   }, [isOpen]);
 
@@ -128,7 +187,7 @@ export const CardInvoiceModal = ({
     return dateStr;
   };
 
-  // Carrega histórico dos últimos 12 meses para o seletor quando o modal abre
+  // Carrega histórico de faturas (12 meses passados + atual + 12 meses futuros)
   useEffect(() => {
     if (!isOpen || !card?.id) return;
 
@@ -142,20 +201,35 @@ export const CardInvoiceModal = ({
     const loadHistory = async () => {
       historyInFlightRef.current = cardId;
       try {
-        const history = await fetchInvoicesHistoryRef.current(cardId, includeAdditionals);
+        const history = await fetchInvoicesHistoryRef.current(cardId, includeAdditionals, 12, 12);
         if (!active) return;
 
         if (history.length > 0) {
-          const options = history.map((inv) => ({
+          // Select mostrando os meses em ordem decrescente (mais recente/futuro primeiro)
+          const sortedDesc = [...history].sort((a, b) => b.reference_month.localeCompare(a.reference_month));
+          const options = sortedDesc.map((inv) => ({
             value: inv.reference_month,
             label: formatMonthLabel(inv.reference_month),
           }));
           setAvailableMonths(options);
-          const startingMonth = initialMonth || history[0].reference_month;
-          setSelectedMonth(startingMonth);
+
+          if (initialMonth && history.some((inv) => inv.reference_month === initialMonth)) {
+            setSelectedMonth(initialMonth);
+          } else {
+            const currentCardMonth = getCurrentReferenceMonth(card);
+            const hasCurrent = history.some((inv) => inv.reference_month === currentCardMonth);
+            if (hasCurrent) {
+              setSelectedMonth(currentCardMonth);
+            } else {
+              const today = new Date();
+              const todayYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+              const closest = findClosestReferenceMonth(history, todayYm);
+              setSelectedMonth(closest);
+            }
+          }
         } else {
           const now = new Date();
-          const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const fallback = getCurrentReferenceMonth(card, now);
           setAvailableMonths([{ value: fallback, label: formatMonthLabel(fallback) }]);
           setSelectedMonth(initialMonth || fallback);
         }
@@ -163,7 +237,7 @@ export const CardInvoiceModal = ({
         console.error('Erro ao buscar histórico de faturas:', err);
         if (active) {
           const now = new Date();
-          const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const fallback = getCurrentReferenceMonth(card, now);
           setAvailableMonths([{ value: fallback, label: formatMonthLabel(fallback) }]);
           setSelectedMonth(initialMonth || fallback);
         }
@@ -313,6 +387,87 @@ export const CardInvoiceModal = ({
       // Toast já tratado no hook
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (editCategory) set.add(editCategory);
+    categories.forEach((c) => {
+      if (c.name) set.add(c.name);
+    });
+    return Array.from(set);
+  }, [categories, editCategory]);
+
+  const handleOpenEdit = (tx: InvoiceTransaction) => {
+    setEditingTx(tx);
+    setEditDescription(tx.description || '');
+    setEditAmount(String(tx.amount || ''));
+    setEditDate(tx.date ? tx.date.slice(0, 10) : '');
+    setEditCategory(tx.category || '');
+    setEditStatus(tx.status || 'pending');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingTx) return;
+
+    const trimmedDesc = editDescription.trim();
+    if (!trimmedDesc) {
+      toast({
+        title: "Descrição vazia",
+        description: "A descrição do lançamento não pode ficar vazia.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedAmount = parseFloat(String(editAmount).replace(',', '.'));
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast({
+        title: "Valor inválido",
+        description: "O valor do lançamento deve ser maior que zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!editDate) {
+      toast({
+        title: "Data inválida",
+        description: "Informe uma data para o lançamento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await updateTransaction(editingTx.id, {
+        description: trimmedDesc,
+        amount: parsedAmount,
+        date: editDate,
+        category: editCategory,
+        status: editStatus,
+      });
+      setEditingTx(null);
+      await reloadInvoice();
+    } catch (err: any) {
+      console.error("Erro ao salvar lançamento:", err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleToggleTransactionStatus = async (tx: InvoiceTransaction) => {
+    const nextStatus: 'paid' | 'pending' = tx.status === 'paid' ? 'pending' : 'paid';
+    setUpdatingTxId(tx.id);
+    try {
+      await updateTransaction(tx.id, { status: nextStatus });
+      await reloadInvoice();
+    } catch (err: any) {
+      console.error("Erro ao alternar status do lançamento:", err);
+    } finally {
+      setUpdatingTxId(null);
     }
   };
 
@@ -559,6 +714,7 @@ export const CardInvoiceModal = ({
                         <TableHead className="hidden sm:table-cell">Categoria</TableHead>
                         <TableHead className="text-center">Status</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
+                        <TableHead className="text-right w-24">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -603,6 +759,36 @@ export const CardInvoiceModal = ({
                           </TableCell>
                           <TableCell className="text-right font-semibold text-sm text-foreground">
                             {formatCurrency(tx.amount)}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleToggleTransactionStatus(tx)}
+                                disabled={isActionLoading || updatingTxId === tx.id}
+                                title={tx.status === 'paid' ? "Marcar como pendente" : "Marcar como pago"}
+                              >
+                                {tx.status === 'paid' ? (
+                                  <Clock className="w-4 h-4 text-amber-500" />
+                                ) : (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleOpenEdit(tx)}
+                                disabled={isActionLoading}
+                                title="Editar"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -748,6 +934,109 @@ export const CardInvoiceModal = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog para edição rápida do lançamento da fatura */}
+      <Dialog open={Boolean(editingTx)} onOpenChange={(open) => !open && !isSavingEdit && setEditingTx(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Lançamento</DialogTitle>
+            <DialogDescription>
+              Corrija as informações do lançamento selecionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-tx-desc">Descrição</Label>
+              <Input
+                id="edit-tx-desc"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Ex: Compra supermercado"
+                disabled={isSavingEdit}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-tx-amount">Valor (R$)</Label>
+                <Input
+                  id="edit-tx-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  placeholder="0,00"
+                  disabled={isSavingEdit}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-tx-date">Data</Label>
+                <Input
+                  id="edit-tx-date"
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  disabled={isSavingEdit}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Categoria</Label>
+              <Select value={editCategory} onValueChange={setEditCategory} disabled={isSavingEdit}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map((catName) => (
+                    <SelectItem key={catName} value={catName}>
+                      {catName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select
+                value={editStatus}
+                onValueChange={(val: 'paid' | 'pending') => setEditStatus(val)}
+                disabled={isSavingEdit}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditingTx(null)}
+              disabled={isSavingEdit}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveEdit}
+              disabled={isSavingEdit}
+            >
+              {isSavingEdit ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
